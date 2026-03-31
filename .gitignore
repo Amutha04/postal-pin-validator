@@ -205,3 +205,22 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# Python virtual environment
+backend/venv/
+
+# Node modules
+frontend/node_modules/
+
+# Environment variables
+.env
+
+# ML model binary
+ml_model/*.pkl
+
+# Dataset (large files)
+dataset/*.csv
+
+# OS files
+.DS_Store
+Thumbs.db
