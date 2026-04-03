@@ -34,8 +34,15 @@ def validate():
         
         # Extract text using OCR
         print("🔍 Starting OCR...")
+        # Extract text using OCR
         extracted_text = extract_text(image_bytes)
-        print("📝 Extracted text:", extracted_text)
+
+        if isinstance(extracted_text, dict) and "error" in extracted_text:
+            print("❌ OCR Error:", extracted_text)
+            return jsonify(extracted_text), 500
+
+        if not isinstance(extracted_text, str):
+            return jsonify({"error": "OCR failed to extract text"}), 500
         
         # Extract PIN and address keywords
         pincode = extract_pincode(extracted_text)
