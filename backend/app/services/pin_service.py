@@ -43,48 +43,127 @@ MULTI_WORD_STATES = [
 def extract_pincode(text):
     """Extract 6-digit PIN code from OCR text"""
 
-    # Step 0: Check injected PIN from box detection
-    injected = re.search(r'PIN:([0-9]{6})', text)
-    if injected:
-        return injected.group(1)
+    lines = text.split('\n')
 
-    # Step 1: Standard 6-digit pattern
-    pattern = r'\b[1-9][0-9]{5}\b'
-    matches = re.findall(pattern, text)
-    if matches:
-        return matches[0]
+    # ── Step 1: Find PIN on same line as city name ──
+    address_indicators = [
+        'mumbai', 'delhi', 'chennai', 'kolkata',
+        'bangalore', 'bengaluru', 'hyderabad', 'pune',
+        'ahmedabad', 'surat', 'jaipur', 'lucknow',
+        'kanpur', 'nagpur', 'indore', 'bhopal',
+        'patna', 'vadodara', 'coimbatore', 'madurai',
+        'salem', 'trichy', 'agra', 'visakhapatnam'
+    ]
 
-    # Step 2: Fix common OCR mistakes line by line
+    for line in lines:
+        line_lower = line.lower()
+        has_city = any(city in line_lower for city in address_indicators)
+        if has_city:
+           # Handle formats: "Mumbai 400001", "Mumbai- 400001", "Mumbai-400001"
+           clean_line = line.replace('-', ' ').replace(',', ' ')
+           pin_match = re.search(r'\b[1-9][0-9]{5}\b', clean_line)
+           if pin_match:
+            candidate = pin_match.group()
+            if is_valid_indian_pin(candidate):
+                return candidate
+
+    # ── Step 2: Skip phone/contact lines, find PIN ──
+    skip_line_keywords = [
+        'contact', 'phone', 'mobile', 'tel',
+        'call', 'mob', 'ph:', 'ph.', 'fax',
+        'whatsapp', 'number', 'no.'
+    ]
+
+    for line in lines:
+        line_lower = line.lower()
+        if any(kw in line_lower for kw in skip_line_keywords):
+            continue
+        all_digits = re.sub(r'[^0-9]', '', line)
+        if len(all_digits) >= 10:
+            continue
+    # Handle dash-separated PINs
+        clean_line = line.replace('-', ' ').replace(',', ' ')
+        pin_match = re.search(r'\b[1-9][0-9]{5}\b', clean_line)
+        if pin_match:
+            candidate = pin_match.group()
+            if is_valid_indian_pin(candidate):
+                return candidate
+
+    # ── Step 3: Fix OCR character mistakes line by line ──
     ocr_fixes = str.maketrans({
-        'l': '1', 'I': '1', 'i': '1',
-        'O': '0', 'o': '0', 'S': '5',
-        'B': '8', 'Z': '2', 't': '1',
-        'T': '1', 'G': '6', 'g': '9',
-        'q': '9', 'b': '6', 'd': '0',
-        'e': '8', 'v': '1'
+        'l': '1', 'I': '1', 'O': '0',
+        'o': '0', 'S': '5', 'B': '8',
+        'Z': '2', 'G': '6', 'g': '9',
+        'q': '9'
     })
 
-    lines = text.split('\n')
     for i, line in enumerate(lines):
+        line_lower = line.lower()
+        if any(kw in line_lower for kw in skip_line_keywords):
+            continue
         context = ' '.join(lines[max(0, i-1):min(len(lines), i+2)])
-        if any(k in context for k in ['PIN', 'Pin', 'pin', 'पिन', 'विन']):
+        if any(k in context for k in ['PIN', 'Pin', 'pin', 'पिन']):
             cleaned = line.translate(ocr_fixes)
             digits = re.sub(r'[^0-9]', '', cleaned)
-            if len(digits) == 6 and digits[0] != '0':
+            if len(digits) == 6 and is_valid_indian_pin(digits):
                 return digits
-            elif len(digits) > 6:
+            elif 6 < len(digits) < 10:
                 for j in range(len(digits) - 5):
                     candidate = digits[j:j+6]
-                    if candidate[0] != '0':
+                    if is_valid_indian_pin(candidate):
                         return candidate
 
-    # Step 3: Apply fixes to entire text
-    cleaned_text = text.translate(ocr_fixes)
-    matches = re.findall(r'\b[1-9][0-9]{5}\b', cleaned_text)
-    if matches:
-        return matches[0]
+    # ── Step 4: Last resort — any valid PIN not in phone line ──
+    all_pins = re.findall(r'\b[1-9][0-9]{5}\b', text)
+    for pin in all_pins:
+        if is_valid_indian_pin(pin) and not is_phone_number(text, pin):
+            return pin
 
     return None
+
+
+def is_valid_indian_pin(pin):
+    """
+    Validate if PIN looks like a real Indian PIN code
+    Indian PINs:
+    - Always 6 digits
+    - First digit 1-9 (never 0)
+    - Last 3 digits not all zeros (e.g. 110000 is invalid)
+    - Not a sequence like 123456, 111111
+    """
+    if len(pin) != 6:
+        return False
+    if pin[0] == '0':
+        return False
+    # Reject obviously fake PINs
+    fake_pins = {'123456', '111111', '000000', '999999', 
+                 '112233', '123123', '654321'}
+    if pin in fake_pins:
+        return False
+    
+    return True
+
+
+def is_phone_number(text, pin):
+    """
+    Check if the 6-digit sequence is part of a phone number
+    Phone numbers in India are 10 digits
+    """
+    # Find the PIN in text and check surrounding digits
+    pattern = r'\d*' + re.escape(pin) + r'\d*'
+    matches = re.findall(pattern, text)
+    for match in matches:
+        # If surrounded by more digits making it 8+ digits = phone number
+        if len(match) >= 8:
+            return True
+    # Check if preceded by "contact", "phone", "mobile", "tel"
+    phone_keywords = ['contact', 'phone', 'mobile', 'tel', 'call', 'mob']
+    pin_index = text.lower().find(pin)
+    if pin_index > 0:
+        before = text[max(0, pin_index-20):pin_index].lower()
+        if any(kw in before for kw in phone_keywords):
+            return True
+    return False
 
 def extract_address_keywords(text):
     """Extract meaningful keywords from address text"""

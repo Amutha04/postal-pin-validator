@@ -70,43 +70,42 @@ def extract_pin_from_boxes(img):
 def extract_text(image_bytes):
     """Extract full text from image using Tesseract OCR"""
     try:
-        # Convert bytes to numpy array
         np_array = np.frombuffer(image_bytes, np.uint8)
         img = cv2.imdecode(np_array, cv2.IMREAD_COLOR)
-        
-        # First try to extract PIN from box region specifically
-        pin_from_box = extract_pin_from_boxes(img)
-        
-        # Preprocess full image for text extraction
+
+        # Preprocess full image
         processed = preprocess_image(img)
         pil_img = Image.fromarray(processed)
-        
-        # Extract full text
-        full_text = pytesseract.image_to_string(
-            pil_img,
-            config=r'--oem 3 --psm 6'
-        )
 
-        # Fix common printed text OCR errors
+        # Try multiple configs, pick best
+        configs = [
+            r'--oem 3 --psm 6',
+            r'--oem 3 --psm 4',
+            r'--oem 3 --psm 11',
+        ]
+
+        best_text = ''
+        for config in configs:
+            result = pytesseract.image_to_string(
+                pil_img, config=config
+            )
+            if len(result) > len(best_text):
+                best_text = result
+
+        # Fix common OCR errors
         ocr_corrections = {
-            'ouiarat': 'Gujarat',
-            'Ouiarat': 'Gujarat', 
-            'Gujrat': 'Gujarat',
-            'Maharastra': 'Maharashtra',
-            'Rajasthan': 'Rajasthan',
-            'Tamilnadu': 'Tamil Nadu',
-            'Deihi': 'Delhi',
-            'Chennal': 'Chennai',
-            'Mumbei': 'Mumbai',
+            'ouiarat': 'Gujarat', 'Ouiarat': 'Gujarat',
+            'Mumbat': 'Mumbai', 'Mumbay': 'Mumbai',
+            'Deihi': 'Delhi', 'Delni': 'Delhi',
+            'Chennal': 'Chennai', 'Channai': 'Chennai',
+            'Kolkota': 'Kolkata', 'Calcuta': 'Kolkata',
+            'Bangalor': 'Bangalore', 'Bengalur': 'Bangalore',
+            'Hydrabad': 'Hyderabad', 'Hyderabad': 'Hyderabad',
         }
         for wrong, correct in ocr_corrections.items():
-            full_text = full_text.replace(wrong, correct)
-        
-        # If we found PIN from box, inject it into text
-        if pin_from_box:
-            full_text = full_text + f"\nPIN:{pin_from_box}"
-        
-        return full_text.strip()
-        
+            best_text = best_text.replace(wrong, correct)
+
+        return best_text.strip()
+
     except Exception as e:
         return {"error": str(e)}
