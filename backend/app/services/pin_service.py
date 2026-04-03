@@ -1,34 +1,223 @@
 import re
+from difflib import SequenceMatcher
 from app.models.postal_model import (
-    get_by_pincode, 
-    get_by_district, 
+    get_by_pincode,
     get_by_state,
+    get_by_district,
+    get_by_circle,
+    get_by_state_and_district,
+    get_by_state_and_circle,
+    get_by_state_district_division,
     get_post_offices_by_pincode
 )
 from app.services.ml_service import validate_pin_with_ml
 
+# ─────────────────────────────────────────
+# Words to ignore during keyword matching
+# ─────────────────────────────────────────
+SKIP_WORDS = {
+    'nagar', 'road', 'street', 'block', 'house',
+    'flat', 'near', 'post', 'dear', 'respected',
+    'india', 'bharat', 'from', 'name', 'addr',
+    'dist', 'lane', 'area', 'colony', 'sector',
+    'plot', 'floor', 'building', 'apartment',
+    'society', 'marg', 'chowk', 'bazaar', 'bazar',
+    'village', 'town', 'city', 'state', 'circle',
+    'division', 'region', 'office', 'speed', 'mail',
+    'registered', 'courier', 'parcel', 'letter',
+    'south', 'north', 'east', 'west', 'central',
+    'your', 'their', 'from', 'with', 'that', 'this',
+    'through', 'sincerely', 'regards', 'thanking'
+}
+
+# ─────────────────────────────────────────
+# Known multi-word states for better matching
+# ─────────────────────────────────────────
+MULTI_WORD_STATES = [
+    'tamil nadu', 'west bengal', 'andhra pradesh',
+    'uttar pradesh', 'madhya pradesh', 'himachal pradesh',
+    'arunachal pradesh', 'jammu kashmir', 'jammu and kashmir',
+    'andaman nicobar', 'andaman and nicobar'
+]
+
 def extract_pincode(text):
     """Extract 6-digit PIN code from OCR text"""
+
+    # Step 0: Check injected PIN from box detection
+    injected = re.search(r'PIN:([0-9]{6})', text)
+    if injected:
+        return injected.group(1)
+
+    # Step 1: Standard 6-digit pattern
     pattern = r'\b[1-9][0-9]{5}\b'
     matches = re.findall(pattern, text)
-    return matches[0] if matches else None
+    if matches:
+        return matches[0]
+
+    # Step 2: Fix common OCR mistakes line by line
+    ocr_fixes = str.maketrans({
+        'l': '1', 'I': '1', 'i': '1',
+        'O': '0', 'o': '0', 'S': '5',
+        'B': '8', 'Z': '2', 't': '1',
+        'T': '1', 'G': '6', 'g': '9',
+        'q': '9', 'b': '6', 'd': '0',
+        'e': '8', 'v': '1'
+    })
+
+    lines = text.split('\n')
+    for i, line in enumerate(lines):
+        context = ' '.join(lines[max(0, i-1):min(len(lines), i+2)])
+        if any(k in context for k in ['PIN', 'Pin', 'pin', 'पिन', 'विन']):
+            cleaned = line.translate(ocr_fixes)
+            digits = re.sub(r'[^0-9]', '', cleaned)
+            if len(digits) == 6 and digits[0] != '0':
+                return digits
+            elif len(digits) > 6:
+                for j in range(len(digits) - 5):
+                    candidate = digits[j:j+6]
+                    if candidate[0] != '0':
+                        return candidate
+
+    # Step 3: Apply fixes to entire text
+    cleaned_text = text.translate(ocr_fixes)
+    matches = re.findall(r'\b[1-9][0-9]{5}\b', cleaned_text)
+    if matches:
+        return matches[0]
+
+    return None
 
 def extract_address_keywords(text):
-    """Extract keywords from OCR text"""
+    """Extract meaningful keywords from address text"""
     clean_text = re.sub(r'[^a-zA-Z\s]', ' ', text)
-    words = [w.strip() for w in clean_text.split() 
-             if len(w.strip()) > 3]
-    return words
+    words = clean_text.lower().split()
+    
+    # Filter out skip words and short words
+    keywords = [
+        w.strip() for w in words
+        if len(w.strip()) > 3 and w.strip() not in SKIP_WORDS
+    ]
+    return list(dict.fromkeys(keywords))  # Remove duplicates
 
-def validate_pin(pincode, address_keywords):
+def fuzzy_match(word1, word2, threshold=0.75):
+    """Check if two words are similar"""
+    ratio = SequenceMatcher(
+        None, word1.lower(), word2.lower()
+    ).ratio()
+    return ratio >= threshold
+
+def find_state_from_keywords(keywords, full_text):
     """
-    Full validation combining MongoDB + ML
+    Step 1 of hierarchical search:
+    Find matching state from keywords
     """
-    # ── Step 1: Check PIN exists in MongoDB ──
+    full_lower = full_text.lower()
+
+    # Check multi-word states first
+    for state in MULTI_WORD_STATES:
+        if state in full_lower:
+            records = get_by_state(state)
+            if records:
+                return records[0].get("statename"), records
+
+    # Check single keywords against states
+    for keyword in keywords:
+        records = get_by_state(keyword)
+        if records:
+            # Verify it's a real state match not partial
+            state_name = records[0].get("statename", "").lower()
+            if fuzzy_match(keyword, state_name) or keyword in state_name:
+                return records[0].get("statename"), records
+
+    return None, []
+
+def find_district_from_keywords(keywords, state_name):
+    """
+    Step 2 of hierarchical search:
+    Find matching district within the found state
+    """
+    for keyword in keywords:
+        records = get_by_state_and_district(state_name, keyword)
+        if records:
+            return records[0].get("district"), records
+
+    return None, []
+
+def find_division_from_keywords(keywords, state_name, district_name):
+    """
+    Step 3 of hierarchical search:
+    Find matching division within state+district
+    """
+    for keyword in keywords:
+        records = get_by_state_district_division(
+            state_name, district_name, keyword
+        )
+        if records:
+            return records[0].get("divisionname"), records
+
+    return None, []
+
+def suggest_correct_pin(address_keywords, full_text=""):
+    """
+    Hierarchical PIN suggestion:
+    State → District → Division → PIN
+    """
+    if not address_keywords:
+        return None
+
+    # ── Level 1: Find State ──
+    state_name, state_records = find_state_from_keywords(
+        address_keywords, full_text
+    )
+
+    if not state_name:
+        # Fallback: try direct district search
+        for keyword in address_keywords:
+            records = get_by_district(keyword)
+            if records:
+                return build_suggestion(records[0])
+        return None
+
+    # ── Level 2: Find District within State ──
+    district_name, district_records = find_district_from_keywords(
+        address_keywords, state_name
+    )
+
+    if not district_name:
+        # Return state-level suggestion
+        return build_suggestion(state_records[0])
+
+    # ── Level 3: Find Division within State+District ──
+    division_name, division_records = find_division_from_keywords(
+        address_keywords, state_name, district_name
+    )
+
+    if division_records:
+        return build_suggestion(division_records[0])
+
+    # Return district-level suggestion
+    return build_suggestion(district_records[0])
+
+def build_suggestion(record):
+    """Build suggestion response from a record"""
+    return {
+        "suggested_pin": record.get("pincode"),
+        "district": record.get("district"),
+        "state": record.get("statename"),
+        "circle": record.get("circlename"),
+        "division": record.get("divisionname"),
+        "region": record.get("regionname")
+    }
+
+def validate_pin(pincode, address_keywords, full_text=""):
+    """
+    Full PIN validation:
+    MongoDB lookup + keyword matching + ML validation
+    """
+    # ── Step 1: Check PIN in MongoDB ──
     records = get_by_pincode(pincode)
 
     if not records:
-        suggestion = suggest_correct_pin(address_keywords)
+        suggestion = suggest_correct_pin(address_keywords, full_text)
         return {
             "valid": False,
             "message": "PIN code does not exist ❌",
@@ -36,39 +225,50 @@ def validate_pin(pincode, address_keywords):
             "suggestion": suggestion
         }
 
-    # ── Step 2: Check address keywords match ──
+    # ── Step 2: Match address keywords ──
     matched = False
-    matched_record = None
-
     for record in records:
         district = record.get("district", "").lower()
         state = record.get("statename", "").lower()
         circle = record.get("circlename", "").lower()
         office = record.get("officename", "").lower()
+        division = record.get("divisionname", "").lower()
+        region = record.get("regionname", "").lower()
 
         for keyword in address_keywords:
             kw = keyword.lower()
-            if (kw in district or kw in state or 
-                kw in office or kw in circle):
+            # Exact match
+            if (kw in district or kw in state or
+                    kw in office or kw in circle or
+                    kw in division or kw in region):
                 matched = True
-                matched_record = record
+                break
+            # Fuzzy match for OCR errors
+            if (fuzzy_match(kw, district) or
+                    fuzzy_match(kw, state)):
+                matched = True
                 break
         if matched:
             break
 
     # ── Step 3: ML Validation ──
     ml_result = {"ml_valid": None, "message": "ML skipped"}
+    first = records[0]
+    district = first.get("district", "")
+    state = first.get("statename", "")
+    circle = first.get("circlename", "")
 
-    if records:
-        first = records[0]
-        district = first.get("district", "")
-        state = first.get("statename", "")
-        circle = first.get("circlename", "")
-
-        if district and state and circle:
-            ml_result = validate_pin_with_ml(
-                pincode, district, state, circle
-            )
+    if district and state and circle:
+        ml_result = validate_pin_with_ml(
+            pincode, district, state, circle
+        )
+        # Trust MongoDB match over ML if prefix is close
+        if matched and ml_result.get("ml_valid") == False:
+            predicted = ml_result.get("predicted_prefix", "")
+            actual = str(pincode)[:3]
+            if predicted and abs(int(actual) - int(predicted)) <= 1:
+                ml_result["ml_valid"] = True
+                ml_result["message"] = "ML confirms PIN is valid ✅"
 
     # ── Step 4: Get post offices ──
     post_offices = get_post_offices_by_pincode(pincode)
@@ -79,47 +279,26 @@ def validate_pin(pincode, address_keywords):
             "valid": True,
             "message": "PIN code matches the address ✅",
             "pincode": pincode,
-            "district": records[0].get("district"),
-            "state": records[0].get("statename"),
-            "circle": records[0].get("circlename"),
-            "region": records[0].get("regionname"),
-            "division": records[0].get("divisionname"),
-            "latitude": records[0].get("latitude"),
-            "longitude": records[0].get("longitude"),
-            "post_offices": post_offices[:10],  # Top 10
+            "district": first.get("district"),
+            "state": first.get("statename"),
+            "circle": first.get("circlename"),
+            "region": first.get("regionname"),
+            "division": first.get("divisionname"),
+            "latitude": first.get("latitude"),
+            "longitude": first.get("longitude"),
+            "post_offices": post_offices[:10],
             "ml_validation": ml_result
         }
     else:
-        suggestion = suggest_correct_pin(address_keywords)
+        suggestion = suggest_correct_pin(address_keywords, full_text)
         return {
             "valid": False,
             "message": "PIN code does not match address ❌",
             "pincode": pincode,
             "actual_location": {
-                "district": records[0].get("district"),
-                "state": records[0].get("statename"),
+                "district": first.get("district"),
+                "state": first.get("statename"),
             },
             "ml_validation": ml_result,
             "suggestion": suggestion
         }
-
-def suggest_correct_pin(address_keywords):
-    """Suggest correct PIN from address keywords"""
-    for keyword in address_keywords:
-        district_records = get_by_district(keyword)
-        if district_records:
-            return {
-                "suggested_pin": district_records[0].get("pincode"),
-                "district": district_records[0].get("district"),
-                "state": district_records[0].get("statename"),
-                "circle": district_records[0].get("circlename")
-            }
-        state_records = get_by_state(keyword)
-        if state_records:
-            return {
-                "suggested_pin": state_records[0].get("pincode"),
-                "district": state_records[0].get("district"),
-                "state": state_records[0].get("statename"),
-                "circle": state_records[0].get("circlename")
-            }
-    return None

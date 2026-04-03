@@ -7,7 +7,7 @@ import os
 # ─────────────────────────────────────────
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 MODEL_PATH = os.path.join(BASE_DIR, "ml_model", "saved_models")
-print(f"Looking for models in: {MODEL_PATH}") 
+
 try:
     with open(f"{MODEL_PATH}/rf_model.pkl", "rb") as f:
         model = pickle.load(f)
