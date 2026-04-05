@@ -15,7 +15,7 @@
 
 Indian PIN codes are unique to each location. People often write incorrect or mismatched PIN codes on envelopes, causing delivery failures. This system solves that by:
 
-- Scanning envelope images using **Gemini 2.5 Flash Vision AI** (with Tesseract OCR as fallback)
+- Scanning envelope images using **Gemini 2.5 Flash Vision AI** (with EasyOCR as fallback)
 - Extracting the PIN code, recipient name, address, city, district, and state
 - Validating against **157,000+ official India Post records** in MongoDB
 - Suggesting the **correct PIN** using hierarchical search if a mismatch is found
@@ -27,7 +27,7 @@ Indian PIN codes are unique to each location. People often write incorrect or mi
 
 - **Image Upload** - Drag & drop or click to upload printed/handwritten envelope images
 - **AI-Powered OCR** - Gemini 2.5 Flash reads handwritten text, handles rotated images, colored envelopes
-- **Tesseract Fallback** - Works offline with Tesseract OCR + OpenCV preprocessing (CLAHE, adaptive threshold)
+- **EasyOCR Fallback** - Works offline with EasyOCR + OpenCV preprocessing (CLAHE, adaptive threshold)
 - **PIN Validation** - Validates PIN against 157,000+ Indian postal records in MongoDB
 - **ML Validation** - Random Forest model validates PIN prefix matches the region
 - **Smart Suggestion** - Hierarchical suggestion algorithm (State > District > Division)
@@ -44,7 +44,7 @@ Indian PIN codes are unique to each location. People often write incorrect or mi
 | Backend | Python 3.13+, Flask, Flask-CORS |
 | Database | MongoDB 7.0+ |
 | OCR (Primary) | Google Gemini 2.5 Flash Vision API |
-| OCR (Fallback) | Tesseract OCR 5.x + OpenCV |
+| OCR (Fallback) | EasyOCR 1.7 + OpenCV |
 | Machine Learning | Random Forest Classifier (scikit-learn) |
 | Dataset | India Post Official PIN Directory (157,000+ records) |
 
@@ -61,7 +61,7 @@ postal-pin-validator/
 |   |   |   +-- pin_routes.py        <- API endpoints (Gemini + Tesseract routing)
 |   |   |-- services/
 |   |   |   |-- gemini_ocr_service.py <- Gemini 2.5 Flash Vision integration
-|   |   |   |-- ocr_service.py       <- Tesseract OCR with preprocessing pipeline
+|   |   |   |-- ocr_service.py       <- EasyOCR with preprocessing pipeline
 |   |   |   |-- pin_service.py       <- PIN extraction + validation logic
 |   |   |   +-- ml_service.py        <- Random Forest ML validation
 |   |   +-- models/
@@ -97,7 +97,7 @@ postal-pin-validator/
 Upload Envelope Image
          |
          v
-Gemini 2.5 Flash Vision AI  (or Tesseract OCR fallback)
+Gemini 2.5 Flash Vision AI  (or EasyOCR fallback)
    - Reads handwritten/printed text
    - Extracts recipient, sender, PIN, address
    - Returns structured JSON
@@ -135,7 +135,7 @@ Result
 - **MongoDB 7.0+** (Community Edition, running on localhost:27017)
 - **Git**
 - **Gemini API Key** (free) - get it from https://aistudio.google.com/apikey
-- **Tesseract OCR 5.x** (optional, only needed if not using Gemini)
+- No extra system installs needed — EasyOCR is included in pip dependencies
 
 ### Step 1: Clone the repository
 
@@ -163,7 +163,6 @@ MONGO_URI=mongodb://localhost:27017/
 DB_NAME=postal_db
 GEMINI_API_KEY=your-gemini-api-key-here
 USE_GEMINI=true
-TESSERACT_PATH=C:\Program Files\Tesseract-OCR\tesseract.exe
 SECRET_KEY=your-secret-key
 ```
 
@@ -173,7 +172,6 @@ SECRET_KEY=your-secret-key
 | `USE_GEMINI` | No | Set `true` for Gemini Vision, `false` for Tesseract. Default: `false` |
 | `MONGO_URI` | No | MongoDB connection string. Default: `mongodb://localhost:27017/` |
 | `DB_NAME` | No | Database name. Default: `postal_db` |
-| `TESSERACT_PATH` | No | Path to Tesseract executable (only needed if USE_GEMINI=false) |
 
 ### Step 4: Import dataset into MongoDB
 
@@ -279,15 +277,16 @@ The ML model acts as a secondary validation layer. After MongoDB confirms the PI
 
 ## OCR Comparison
 
-| Feature | Gemini 2.5 Flash | Tesseract (fallback) |
+| Feature | Gemini 2.5 Flash | EasyOCR (fallback) |
 |---|---|---|
-| Handwritten text | Excellent | Poor |
+| Handwritten text | Excellent | Good |
 | Colored envelopes | Handles well | Needs preprocessing |
-| Rotated images | Auto-handles | Manual rotation needed |
-| Hindi/regional text | Supported | Limited |
-| Speed | ~2-3 seconds | ~5-8 seconds |
+| Rotated images | Auto-handles | Auto-rotation built in |
+| Hindi/regional text | Supported | Supported (80+ languages) |
+| Speed | ~2-3 seconds | ~5-10 seconds |
 | Offline support | No (needs internet) | Yes |
 | Cost | Free tier available | Free |
+| System install | None (API) | None (pip install) |
 
 ---
 
@@ -295,7 +294,7 @@ The ML model acts as a secondary validation layer. After MongoDB confirms the PI
 
 - [India Post](https://www.indiapost.gov.in/) for the official PIN directory dataset
 - [Google Gemini](https://ai.google.dev/) for Vision AI
-- [Tesseract OCR](https://github.com/tesseract-ocr/tesseract) for offline text extraction
+- [EasyOCR](https://github.com/JaidedAI/EasyOCR) for offline text extraction
 - [scikit-learn](https://scikit-learn.org/) for the Random Forest implementation
 
 ---

@@ -11,13 +11,13 @@ if Config.USE_GEMINI and Config.GEMINI_API_KEY:
     print("[OK] Gemini OCR enabled")
 else:
     extract_with_gemini = None
-    print("[INFO] Using Tesseract OCR (Gemini not configured)")
+    print("[INFO] Using EasyOCR (Gemini not configured)")
 
 
 @pin_bp.route('/health', methods=['GET'])
 def health():
     """Check if API is running"""
-    ocr_engine = "Gemini 2.5 Flash" if extract_with_gemini else "Tesseract"
+    ocr_engine = "Gemini 2.5 Flash" if extract_with_gemini else "EasyOCR"
     return jsonify({"status": "API is running", "ocr_engine": ocr_engine}), 200
 
 
@@ -47,7 +47,7 @@ def validate():
             gemini_result = extract_with_gemini(image_bytes)
 
             if "error" in gemini_result:
-                print("[ERROR] Gemini failed, falling back to Tesseract...")
+                print("[ERROR] Gemini failed, falling back to EasyOCR...")
                 return _process_with_tesseract(image_bytes)
 
             extracted_text = gemini_result["text"]
@@ -94,8 +94,8 @@ def validate():
 
 
 def _process_with_tesseract(image_bytes):
-    """Original Tesseract-based processing"""
-    print("[INFO] Starting Tesseract OCR...")
+    """EasyOCR-based processing"""
+    print("[INFO] Starting EasyOCR...")
     extracted_text = extract_text(image_bytes)
 
     if isinstance(extracted_text, dict) and "error" in extracted_text:
@@ -118,6 +118,6 @@ def _process_with_tesseract(image_bytes):
     result = validate_pin(pincode, keywords, extracted_text)
     result["extracted_text"] = extracted_text
     result["extracted_pin"] = pincode
-    result["ocr_engine"] = "Tesseract"
+    result["ocr_engine"] = "EasyOCR"
 
     return jsonify(result), 200
