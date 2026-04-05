@@ -41,12 +41,74 @@ MULTI_WORD_STATES = [
 ]
 
 def extract_pincode(text):
-    """Extract 6-digit PIN code from OCR text"""
-    print("🔍 Extracting PIN from:\n", text)
-    
+    """Extract 6-digit PIN code from OCR text — prioritizes 'To' address over 'From'"""
+    print("[INFO] Extracting PIN from:\n", text)
+
     lines = text.split('\n')
-    
-    # ── Step 1: Find PIN on same line as city name ──
+
+    # ── Step 0: Split text into "To" section vs rest ──
+    # Find where "To" and "From" sections start
+    to_start = None
+    from_start = None
+    for i, line in enumerate(lines):
+        line_lower = line.strip().lower()
+        if re.match(r'^(to[,:\s]|dear\b)', line_lower) and to_start is None:
+            to_start = i
+        if re.match(r'^from[,:\s]', line_lower) and from_start is None:
+            from_start = i
+
+    # Build prioritized line order: "To" section first, then rest
+    if to_start is not None:
+        # "To" section runs from to_start until "From" or end
+        to_end = from_start if (from_start is not None and from_start > to_start) else len(lines)
+        to_lines = list(range(to_start, to_end))
+        other_lines = [i for i in range(len(lines)) if i not in to_lines]
+        ordered_indices = to_lines + other_lines
+    else:
+        ordered_indices = list(range(len(lines)))
+
+    skip_line_keywords = [
+        'contact', 'phone', 'mobile', 'tel',
+        'call', 'mob', 'ph:', 'ph.', 'fax',
+        'whatsapp', 'number'
+    ]
+
+    # If "From" section exists, mark those lines to deprioritize
+    from_indices = set()
+    if from_start is not None:
+        from_end = to_start if (to_start is not None and to_start > from_start) else len(lines)
+        from_indices = set(range(from_start, from_end))
+
+    # ── Step 1: Find PIN near "PIN" keyword (highest confidence) ──
+    for idx in ordered_indices:
+        line = lines[idx]
+        line_lower = line.lower()
+        context = ' '.join(lines[max(0, idx-1):min(len(lines), idx+2)])
+        if any(k in context.lower() for k in ['pin', 'pin:']):
+            clean_line = line.replace('-', ' ').replace(',', ' ')
+            pin_match = re.search(r'\b[1-9][0-9]{5}\b', clean_line)
+            if pin_match:
+                candidate = pin_match.group()
+                if is_valid_indian_pin(candidate):
+                    return candidate
+            # Try OCR digit fixes on this line
+            ocr_fixes = str.maketrans({
+                'l': '1', 'I': '1', 'O': '0',
+                'o': '0', 'S': '5', 'B': '8',
+                'Z': '2', 'G': '6', 'g': '9',
+                'q': '9'
+            })
+            cleaned = line.translate(ocr_fixes)
+            digits = re.sub(r'[^0-9]', '', cleaned)
+            if len(digits) == 6 and is_valid_indian_pin(digits):
+                return digits
+            elif 6 < len(digits) < 10:
+                for j in range(len(digits) - 5):
+                    candidate = digits[j:j+6]
+                    if is_valid_indian_pin(candidate):
+                        return candidate
+
+    # ── Step 2: Find PIN on same line as city/state name ──
     address_indicators = [
         'mumbai', 'delhi', 'chennai', 'kolkata',
         'bangalore', 'bengaluru', 'hyderabad', 'pune',
@@ -58,7 +120,11 @@ def extract_pincode(text):
         'kerala', 'punjab', 'haryana', 'bihar', 'odisha'
     ]
 
-    for line in lines:
+    # Search "To" section first, skip "From" section
+    for idx in ordered_indices:
+        if idx in from_indices:
+            continue
+        line = lines[idx]
         line_lower = line.lower()
         has_city = any(city in line_lower for city in address_indicators)
         if has_city:
@@ -69,26 +135,24 @@ def extract_pincode(text):
                 if is_valid_indian_pin(candidate):
                     return candidate
 
-    # ── Step 2: Find standalone PIN line ──
-    # A line that contains ONLY a 6-digit number
-    for line in lines:
+    # ── Step 3: Find standalone PIN line (not in From section) ──
+    for idx in ordered_indices:
+        if idx in from_indices:
+            continue
+        line = lines[idx]
         stripped = line.strip().replace('-', '').replace(' ', '')
         if re.match(r'^[1-9][0-9]{5}$', stripped):
             if is_valid_indian_pin(stripped):
                 return stripped
 
-    # ── Step 3: Skip phone/contact lines, find PIN ──
-    skip_line_keywords = [
-        'contact', 'phone', 'mobile', 'tel',
-        'call', 'mob', 'ph:', 'ph.', 'fax',
-        'whatsapp', 'number'
-    ]
-
-    for line in lines:
+    # ── Step 4: Any valid PIN not in From section, skip phone lines ──
+    for idx in ordered_indices:
+        if idx in from_indices:
+            continue
+        line = lines[idx]
         line_lower = line.lower()
         if any(kw in line_lower for kw in skip_line_keywords):
             continue
-        # Skip lines with 10+ digits (phone numbers)
         all_digits = re.sub(r'[^0-9]', '', line)
         if len(all_digits) >= 10:
             continue
@@ -99,31 +163,7 @@ def extract_pincode(text):
             if is_valid_indian_pin(candidate):
                 return candidate
 
-    # ── Step 4: OCR fixes on PIN-related lines ──
-    ocr_fixes = str.maketrans({
-        'l': '1', 'I': '1', 'O': '0',
-        'o': '0', 'S': '5', 'B': '8',
-        'Z': '2', 'G': '6', 'g': '9',
-        'q': '9'
-    })
-
-    for i, line in enumerate(lines):
-        line_lower = line.lower()
-        if any(kw in line_lower for kw in skip_line_keywords):
-            continue
-        context = ' '.join(lines[max(0, i-1):min(len(lines), i+2)])
-        if any(k in context for k in ['PIN', 'Pin', 'pin', 'पिन']):
-            cleaned = line.translate(ocr_fixes)
-            digits = re.sub(r'[^0-9]', '', cleaned)
-            if len(digits) == 6 and is_valid_indian_pin(digits):
-                return digits
-            elif 6 < len(digits) < 10:
-                for j in range(len(digits) - 5):
-                    candidate = digits[j:j+6]
-                    if is_valid_indian_pin(candidate):
-                        return candidate
-
-    # ── Step 5: Last resort ──
+    # ── Step 5: Fall back to From section if nothing else found ──
     all_pins = re.findall(r'\b[1-9][0-9]{5}\b', text)
     for pin in all_pins:
         if is_valid_indian_pin(pin) and not is_phone_number(text, pin):

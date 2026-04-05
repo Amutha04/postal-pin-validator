@@ -1,133 +1,208 @@
+/* Hero */
 .upload-section {
-  background: white;
-  border-radius: 16px;
-  padding: 2rem;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.08);
-  margin-bottom: 2rem;
+  margin-bottom: 40px;
 }
 
-.upload-section h2 {
-  font-size: 1.3rem;
-  color: #1e293b;
-  margin-bottom: 1.5rem;
-  font-weight: 600;
+.hero-text {
+  margin-bottom: 32px;
 }
 
-.drop-zone {
-  border: 2px dashed #f97316;
+.hero-title {
+  font-size: 32px;
+  font-weight: 800;
+  color: #1c1917;
+  letter-spacing: -0.03em;
+  line-height: 1.2;
+  margin-bottom: 10px;
+}
+
+.highlight {
+  color: #dc2626;
+}
+
+.hero-sub {
+  font-size: 15px;
+  color: #78716c;
+  line-height: 1.6;
+}
+
+/* ---- Envelope ---- */
+.envelope {
+  background: #fff;
+  border: 2px solid #e7e5e4;
   border-radius: 12px;
-  padding: 2rem;
-  text-align: center;
+  overflow: hidden;
   cursor: pointer;
-  transition: background 0.2s;
-  min-height: 200px;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.envelope:hover:not(.has-preview) {
+  border-color: #dc2626;
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.08);
+}
+
+.envelope.drag-over {
+  border-color: #dc2626;
+  box-shadow: 0 0 0 4px rgba(220, 38, 38, 0.12);
+  background: #fef2f2;
+}
+
+.envelope.has-preview {
+  cursor: default;
+}
+
+/* Airmail stripes */
+.airmail-stripe {
+  display: flex;
+  height: 6px;
+  overflow: hidden;
+}
+
+.stripe-block {
+  flex: 1;
+  min-width: 28px;
+}
+
+.stripe-block.red { background: #dc2626; }
+.stripe-block.blue { background: #2563eb; }
+
+/* Envelope inner */
+.envelope-content {
+  padding: 48px 24px;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #fff7ed;
+  min-height: 220px;
 }
 
-.drop-zone:hover {
-  background: #ffedd5;
+/* Drop state */
+.drop-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
 }
 
-.drop-placeholder p {
-  margin-top: 1rem;
-  font-size: 1rem;
-  color: #64748b;
-  font-weight: 500;
+.drop-icon {
+  opacity: 0.7;
+  margin-bottom: 4px;
 }
 
-.drop-placeholder span {
-  font-size: 0.8rem;
-  color: #94a3b8;
+.drop-text {
+  font-size: 15px;
+  font-weight: 600;
+  color: #44403c;
+}
+
+.drop-hint {
+  font-size: 13px;
+  color: #a8a29e;
+}
+
+/* Preview */
+.preview-area {
+  position: relative;
+  width: 100%;
+  display: flex;
+  justify-content: center;
 }
 
 .preview-img {
-  max-height: 300px;
+  max-height: 360px;
   max-width: 100%;
   border-radius: 8px;
   object-fit: contain;
 }
 
-.upload-buttons {
-  display: flex;
-  gap: 1rem;
-  margin-top: 1.5rem;
-  flex-wrap: wrap;
-}
-
-.btn-upload {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.7rem 1.5rem;
-  background: white;
-  border: 2px solid #f97316;
-  color: #f97316;
+.clear-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 32px;
+  height: 32px;
   border-radius: 8px;
+  border: none;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
   cursor: pointer;
-  font-weight: 600;
-  font-size: 0.95rem;
-  transition: all 0.2s;
-}
-
-.btn-upload:hover {
-  background: #fff7ed;
-}
-
-.btn-validate {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 0.5rem;
-  padding: 0.7rem 2rem;
-  background: linear-gradient(135deg, #f97316, #ea580c);
-  color: white;
+  transition: background 0.15s;
+}
+
+.clear-btn:hover {
+  background: #dc2626;
+}
+
+/* Buttons */
+.actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 20px;
+}
+
+.btn-ghost {
+  padding: 10px 22px;
+  background: #fff;
+  border: 1.5px solid #d6d3d1;
+  border-radius: 8px;
+  color: #44403c;
+  font-size: 14px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.btn-ghost:hover {
+  background: #fafaf9;
+  border-color: #a8a29e;
+}
+
+.btn-primary {
+  padding: 10px 28px;
+  background: #dc2626;
   border: none;
   border-radius: 8px;
-  cursor: pointer;
+  color: #fff;
+  font-size: 14px;
   font-weight: 600;
-  font-size: 0.95rem;
-  transition: all 0.2s;
-  min-width: 150px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.15s;
 }
 
-.btn-validate:hover:not(:disabled) {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(249,115,22,0.4);
+.btn-primary:hover:not(:disabled) {
+  background: #b91c1c;
 }
 
-.btn-validate:disabled {
-  opacity: 0.6;
+.btn-primary:disabled {
+  opacity: 0.7;
   cursor: not-allowed;
 }
 
-.btn-clear {
-  padding: 0.7rem 1.5rem;
-  background: white;
-  border: 2px solid #ef4444;
-  color: #ef4444;
-  border-radius: 8px;
-  cursor: pointer;
-  font-weight: 600;
-  transition: all 0.2s;
-}
-
-.btn-clear:hover {
-  background: #fef2f2;
+.btn-loading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .spinner {
-  width: 20px;
-  height: 20px;
-  border: 3px solid rgba(255,255,255,0.3);
-  border-top-color: white;
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: #fff;
   border-radius: 50%;
-  animation: spin 0.8s linear infinite;
-  display: inline-block;
+  animation: spin 0.6s linear infinite;
 }
 
 @keyframes spin {
   to { transform: rotate(360deg); }
+}
+
+/* Responsive */
+@media (max-width: 640px) {
+  .hero-title { font-size: 26px; }
+  .envelope-content { padding: 32px 16px; min-height: 180px; }
 }

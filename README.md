@@ -1,151 +1,151 @@
-# 📮 Indian Postal PIN Validator
+# Indian Postal PIN Validator
 
 ![Python](https://img.shields.io/badge/Python-3.13-blue?style=flat-square&logo=python)
 ![Flask](https://img.shields.io/badge/Flask-3.x-black?style=flat-square&logo=flask)
 ![React](https://img.shields.io/badge/React-18.x-61DAFB?style=flat-square&logo=react)
 ![MongoDB](https://img.shields.io/badge/MongoDB-7.x-47A248?style=flat-square&logo=mongodb)
+![Gemini](https://img.shields.io/badge/Gemini-2.5_Flash-4285F4?style=flat-square&logo=google)
 ![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)
 
-> An OCR-powered web application that validates Indian Postal PIN codes against addresses using Machine Learning, helping postal workers and users ensure correct delivery.
+> A web application that validates Indian Postal PIN codes against addresses by reading envelope images using AI-powered OCR and Machine Learning.
 
 ---
 
-## 📌 Problem Statement
+## Problem Statement
 
-Indian PIN codes are unique to each location. People often write incorrect or mismatched PIN codes on envelopes, causing delivery failures. This system solves that problem by:
+Indian PIN codes are unique to each location. People often write incorrect or mismatched PIN codes on envelopes, causing delivery failures. This system solves that by:
 
-- Scanning envelope images using **OCR (Tesseract)**
-- Extracting the PIN code and address automatically
-- Validating them against the **official India Post dataset**
-- Suggesting the **correct PIN** if a mismatch is detected
-
----
-
-## ✨ Features
-
-- 📷 **Image Upload** — Upload printed or handwritten envelope images
-- 🔍 **OCR Extraction** — Automatically extract PIN and address using Tesseract
-- ✅ **PIN Validation** — Validate PIN against 165,000+ Indian postal records
-- 🤖 **ML Validation** — Random Forest model validates PIN prefix accuracy
-- 💡 **Smart Suggestion** — Hierarchical suggestion (State → District → Division)
-- 📮 **Post Office Info** — Shows all post offices with delivery status
-- 📍 **Location Details** — District, State, Circle, Region, Coordinates
-- ✋ **Manual Override** — Enter PIN/address manually if OCR fails
+- Scanning envelope images using **Gemini 2.5 Flash Vision AI** (with Tesseract OCR as fallback)
+- Extracting the PIN code, recipient name, address, city, district, and state
+- Validating against **157,000+ official India Post records** in MongoDB
+- Suggesting the **correct PIN** using hierarchical search if a mismatch is found
+- Cross-validating with a **Random Forest ML model** for PIN prefix accuracy
 
 ---
 
-## 🛠️ Tech Stack
+## Features
+
+- **Image Upload** - Drag & drop or click to upload printed/handwritten envelope images
+- **AI-Powered OCR** - Gemini 2.5 Flash reads handwritten text, handles rotated images, colored envelopes
+- **Tesseract Fallback** - Works offline with Tesseract OCR + OpenCV preprocessing (CLAHE, adaptive threshold)
+- **PIN Validation** - Validates PIN against 157,000+ Indian postal records in MongoDB
+- **ML Validation** - Random Forest model validates PIN prefix matches the region
+- **Smart Suggestion** - Hierarchical suggestion algorithm (State > District > Division)
+- **Post Office Info** - Lists post offices for the PIN with delivery status
+- **Location Details** - District, State, Circle, Region, Division, Coordinates
+
+---
+
+## Tech Stack
 
 | Layer | Technology |
 |---|---|
-| Frontend | React.js, Axios, React Icons, React Toastify |
-| Backend | Python, Flask, Flask-CORS |
-| Database | MongoDB |
-| OCR | Tesseract OCR + OpenCV |
-| Machine Learning | Random Forest (scikit-learn) |
-| Dataset | India Post Official PIN Directory (165,000+ records) |
+| Frontend | React 18, Axios, React Icons, React Toastify |
+| Backend | Python 3.13+, Flask, Flask-CORS |
+| Database | MongoDB 7.0+ |
+| OCR (Primary) | Google Gemini 2.5 Flash Vision API |
+| OCR (Fallback) | Tesseract OCR 5.x + OpenCV |
+| Machine Learning | Random Forest Classifier (scikit-learn) |
+| Dataset | India Post Official PIN Directory (157,000+ records) |
 
 ---
 
-## 🏗️ Project Structure
+## Project Structure
 
 ```
 postal-pin-validator/
-│
-├── backend/                    ← Flask API
-│   ├── app/
-│   │   ├── routes/
-│   │   │   └── pin_routes.py   ← API endpoints
-│   │   ├── services/
-│   │   │   ├── ocr_service.py  ← Tesseract OCR logic
-│   │   │   ├── pin_service.py  ← PIN validation logic
-│   │   │   └── ml_service.py   ← Random Forest logic
-│   │   └── models/
-│   │       └── postal_model.py ← MongoDB queries
-│   ├── config.py
-│   ├── run.py
-│   └── requirements.txt
-│
-├── frontend/                   ← React.js UI
-│   └── src/
-│       ├── components/
-│       │   ├── Header.js
-│       │   ├── UploadSection.js
-│       │   └── ResultSection.js
-│       └── App.js
-│
-├── ml_model/                   ← ML Training
-│   ├── train_model.py
-│   ├── test_model.py
-│   └── saved_models/
-│
-├── dataset/                    ← India Post CSV
-│   └── india_postal.csv
-│
-└── docs/                       ← Documentation
+|
+|-- backend/                         <- Flask API
+|   |-- app/
+|   |   |-- routes/
+|   |   |   +-- pin_routes.py        <- API endpoints (Gemini + Tesseract routing)
+|   |   |-- services/
+|   |   |   |-- gemini_ocr_service.py <- Gemini 2.5 Flash Vision integration
+|   |   |   |-- ocr_service.py       <- Tesseract OCR with preprocessing pipeline
+|   |   |   |-- pin_service.py       <- PIN extraction + validation logic
+|   |   |   +-- ml_service.py        <- Random Forest ML validation
+|   |   +-- models/
+|   |       +-- postal_model.py      <- MongoDB queries
+|   |-- config.py                    <- App configuration
+|   |-- run.py                       <- Entry point
+|   +-- requirements.txt
+|
+|-- frontend/                        <- React UI
+|   +-- src/
+|       |-- components/
+|       |   |-- Header.js
+|       |   |-- UploadSection.js     <- Image upload with drag & drop
+|       |   +-- ResultSection.js     <- Validation results display
+|       +-- App.js
+|
+|-- ml_model/                        <- ML Training
+|   |-- train_model.py
+|   |-- test_model.py
+|   +-- saved_models/                <- Trained model + encoders (.pkl)
+|
+|-- scripts/
+|   +-- import_data.py               <- Dataset download + MongoDB import
+|
++-- dataset/                         <- India Post CSV (auto-downloaded)
 ```
 
 ---
 
-## ⚙️ How It Works
+## How It Works
 
 ```
-📷 Upload Envelope Image
-         ↓
-🔍 Tesseract OCR + OpenCV
-   (Extract text from image)
-         ↓
-🧠 PIN Extraction
-   (Smart extraction ignoring phone numbers)
-         ↓
-🗄️ MongoDB Lookup
-   (Check PIN against 165,000+ records)
-         ↓
-🤖 Random Forest ML Validation
-   (Validate PIN prefix for the region)
-         ↓
-📊 Result
-   ✅ Valid   → Show location + post offices
-   ❌ Invalid → Suggest correct PIN
-              (State → District → Division)
+Upload Envelope Image
+         |
+         v
+Gemini 2.5 Flash Vision AI  (or Tesseract OCR fallback)
+   - Reads handwritten/printed text
+   - Extracts recipient, sender, PIN, address
+   - Returns structured JSON
+         |
+         v
+PIN Extraction
+   - Prioritizes "To" address over "From"
+   - Handles OCR digit errors
+   - Skips phone numbers
+         |
+         v
+MongoDB Lookup
+   - Checks PIN against 157,000+ records
+   - Fetches district, state, circle, region
+         |
+         v
+Random Forest ML Validation
+   - Predicts expected PIN prefix for the region
+   - Cross-validates with extracted PIN
+         |
+         v
+Result
+   Valid   -> Show location details + post offices
+   Invalid -> Suggest correct PIN (State > District > Division)
 ```
 
 ---
 
-## 💡 PIN Suggestion Algorithm
-
-When a PIN mismatch is detected, the system uses a **hierarchical search**:
-
-```
-Step 1: Match STATE from address keywords
-Step 2: Match DISTRICT within that state
-Step 3: Match DIVISION within that district
-Step 4: Return most specific PIN found
-```
-
-This ensures suggestions are always geographically accurate.
-
----
-
-## 🚀 Getting Started
+## Getting Started
 
 ### Prerequisites
 
-- Python 3.13+
-- Node.js 18+
-- MongoDB 7.0+
-- Tesseract OCR 5.x
-- Git
+- **Python 3.13+**
+- **Node.js 18+**
+- **MongoDB 7.0+** (Community Edition, running on localhost:27017)
+- **Git**
+- **Gemini API Key** (free) - get it from https://aistudio.google.com/apikey
+- **Tesseract OCR 5.x** (optional, only needed if not using Gemini)
 
-### Installation
+### Step 1: Clone the repository
 
-#### 1. Clone the repository
 ```bash
-git clone https://github.com/YOUR_USERNAME/postal-pin-validator.git
+git clone https://github.com/Amutha04/postal-pin-validator.git
 cd postal-pin-validator
 ```
 
-#### 2. Backend Setup
+### Step 2: Backend setup
+
 ```bash
 cd backend
 python -m venv venv
@@ -154,69 +154,97 @@ venv\Scripts\activate        # Windows
 pip install -r requirements.txt
 ```
 
-#### 3. Environment Variables
-Create `.env` file in `backend/`:
-```
+### Step 3: Create `.env` file
+
+Create a file named `.env` inside the `backend/` folder:
+
+```env
 MONGO_URI=mongodb://localhost:27017/
 DB_NAME=postal_db
+GEMINI_API_KEY=your-gemini-api-key-here
+USE_GEMINI=true
 TESSERACT_PATH=C:\Program Files\Tesseract-OCR\tesseract.exe
 SECRET_KEY=your-secret-key
 ```
 
-#### 4. Import Dataset
+| Variable | Required | Description |
+|---|---|---|
+| `GEMINI_API_KEY` | Yes (if USE_GEMINI=true) | Free API key from Google AI Studio |
+| `USE_GEMINI` | No | Set `true` for Gemini Vision, `false` for Tesseract. Default: `false` |
+| `MONGO_URI` | No | MongoDB connection string. Default: `mongodb://localhost:27017/` |
+| `DB_NAME` | No | Database name. Default: `postal_db` |
+| `TESSERACT_PATH` | No | Path to Tesseract executable (only needed if USE_GEMINI=false) |
+
+### Step 4: Import dataset into MongoDB
+
+The script auto-downloads the dataset (157,000+ records) if not present:
+
 ```bash
-mongoimport --db postal_db --collection pincodes --type csv --headerline --file "dataset/india_postal.csv"
+cd ..
+python scripts/import_data.py
 ```
 
-#### 5. Train ML Model
-```bash
-cd ml_model
-python train_model.py
-```
+This will:
+- Download the India Post PIN directory CSV (if not in `dataset/`)
+- Import all records into MongoDB `postal_db.pincodes`
+- Create indexes for fast lookups
 
-#### 6. Start Backend
+### Step 5: Start the backend
+
 ```bash
 cd backend
 python run.py
 ```
-Flask runs at `http://127.0.0.1:5000`
 
-#### 7. Frontend Setup
+Flask API runs at **http://127.0.0.1:5000**
+
+### Step 6: Frontend setup (new terminal)
+
 ```bash
 cd frontend
 npm install
 npm start
 ```
-React runs at `http://localhost:3000`
+
+React app runs at **http://localhost:3000**
+
+### Step 7: Test it
+
+1. Open http://localhost:3000 in your browser
+2. Upload an envelope image (printed or handwritten)
+3. Click "Validate PIN"
+4. See the extracted text, PIN validation result, and suggestions
 
 ---
 
-## 📡 API Endpoints
+## API Endpoints
 
 | Method | Endpoint | Description |
 |---|---|---|
-| GET | `/api/health` | Check API status |
+| GET | `/api/health` | Check API status and OCR engine |
 | POST | `/api/validate` | Validate envelope image |
 
 ### POST `/api/validate`
-**Request:** `multipart/form-data`
-| Field | Type | Required |
-|---|---|---|
-| image | File | Yes |
-| manual_pin | String | No |
-| manual_address | String | No |
+
+**Request:** `multipart/form-data` with `image` field
 
 **Response (Valid PIN):**
 ```json
 {
   "valid": true,
-  "message": "PIN code matches the address ✅",
-  "pincode": "395007",
-  "district": "SURAT",
-  "state": "GUJARAT",
-  "circle": "Gujarat Circle",
+  "message": "PIN code matches the address",
+  "pincode": "175126",
+  "district": "KULLU",
+  "state": "HIMACHAL PRADESH",
+  "circle": "Himachal Pradesh Circle",
   "post_offices": [...],
-  "ml_validation": {...}
+  "ml_validation": { "ml_valid": true, "predicted_prefix": "175" },
+  "extracted_text": "Mrs. Jeevan Jyoti, SHAMSHI, Distt. Kullu (H.P), PIN 175126",
+  "ocr_engine": "Gemini 2.5 Flash",
+  "gemini_data": {
+    "recipient": { "name": "Mrs. Jeevan Jyoti", "state": "Himachal Pradesh", "pincode": "175126" },
+    "sender": { "name": "JAGANNATH MANI", "city": "Bangalore" }
+  }
 }
 ```
 
@@ -224,11 +252,11 @@ React runs at `http://localhost:3000`
 ```json
 {
   "valid": false,
-  "message": "PIN code does not match address ❌",
-  "pincode": "395999",
+  "message": "PIN code does not match address",
+  "pincode": "682001",
   "suggestion": {
-    "suggested_pin": "395007",
-    "district": "SURAT",
+    "suggested_pin": "380001",
+    "district": "AHMEDABAD",
     "state": "GUJARAT"
   }
 }
@@ -236,40 +264,42 @@ React runs at `http://localhost:3000`
 
 ---
 
-## 🤖 ML Model Details
+## ML Model Details
 
 | Parameter | Value |
 |---|---|
 | Algorithm | Random Forest Classifier |
-| Training Records | ~50,000 unique postal combinations |
-| Features | District, State, Circle (encoded) |
+| Features | District, State, Circle (label encoded) |
 | Target | PIN prefix (first 3 digits) |
-| Accuracy | ~85%+ |
 | Library | scikit-learn |
 
----
-
-## 📸 Screenshots
-
-> Add screenshots of your application here after deployment
+The ML model acts as a secondary validation layer. After MongoDB confirms the PIN exists, the model checks whether the PIN prefix is consistent with the district/state/circle combination.
 
 ---
 
-## 🙏 Acknowledgements
+## OCR Comparison
+
+| Feature | Gemini 2.5 Flash | Tesseract (fallback) |
+|---|---|---|
+| Handwritten text | Excellent | Poor |
+| Colored envelopes | Handles well | Needs preprocessing |
+| Rotated images | Auto-handles | Manual rotation needed |
+| Hindi/regional text | Supported | Limited |
+| Speed | ~2-3 seconds | ~5-8 seconds |
+| Offline support | No (needs internet) | Yes |
+| Cost | Free tier available | Free |
+
+---
+
+## Acknowledgements
 
 - [India Post](https://www.indiapost.gov.in/) for the official PIN directory dataset
-- [Tesseract OCR](https://github.com/tesseract-ocr/tesseract) for text extraction
+- [Google Gemini](https://ai.google.dev/) for Vision AI
+- [Tesseract OCR](https://github.com/tesseract-ocr/tesseract) for offline text extraction
 - [scikit-learn](https://scikit-learn.org/) for the Random Forest implementation
 
 ---
 
-## 📄 License
+## License
 
-This project is licensed under the MIT License — see the [LICENSE](LICENSE) file for details.
-
----
-
-## 👨‍💻 Author
-
-Made with ❤️ for improving India's postal delivery system.
-
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.

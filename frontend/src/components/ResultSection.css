@@ -1,167 +1,353 @@
-.result-section {
+.results {
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
+  gap: 16px;
+  animation: fadeUp 0.35s ease-out;
 }
 
-.status-banner {
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ---- Postmark Status Card ---- */
+.postmark-card {
   display: flex;
   align-items: center;
-  gap: 1rem;
-  padding: 1.5rem;
-  border-radius: 16px;
-  color: white;
+  gap: 28px;
+  padding: 28px 32px;
+  border-radius: 12px;
+  border: 2px solid;
 }
 
-.status-banner.valid {
-  background: linear-gradient(135deg, #22c55e, #16a34a);
+.postmark-card.valid {
+  background: #f0fdf4;
+  border-color: #bbf7d0;
 }
 
-.status-banner.invalid {
-  background: linear-gradient(135deg, #ef4444, #dc2626);
+.postmark-card.invalid {
+  background: #fef2f2;
+  border-color: #fecaca;
 }
 
-.status-banner h3 {
-  font-size: 1.2rem;
-  font-weight: 700;
-}
-
-.status-banner p {
-  opacity: 0.9;
-  margin-top: 0.2rem;
-}
-
-.info-card {
-  background: white;
-  border-radius: 16px;
-  padding: 1.5rem;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.08);
-}
-
-.info-card h4 {
+/* Circular postmark stamp */
+.stamp {
+  flex-shrink: 0;
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  font-size: 1rem;
-  color: #1e293b;
-  margin-bottom: 1rem;
-  padding-bottom: 0.5rem;
-  border-bottom: 2px solid #f1f5f9;
+  justify-content: center;
 }
 
-.ocr-text {
-  background: #f8fafc;
-  padding: 1rem;
-  border-radius: 8px;
-  font-size: 0.85rem;
-  color: #475569;
-  white-space: pre-wrap;
-  word-break: break-word;
-  border: 1px solid #e2e8f0;
+.stamp-valid {
+  border: 3px solid #22c55e;
 }
 
-.details-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  gap: 1rem;
+.stamp-invalid {
+  border: 3px solid #ef4444;
 }
 
-.detail-item {
+.stamp-ring {
   display: flex;
   flex-direction: column;
-  gap: 0.3rem;
-}
-
-.label {
-  font-size: 0.75rem;
-  color: #94a3b8;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  font-weight: 600;
-}
-
-.value {
-  font-size: 0.95rem;
-  color: #1e293b;
-  font-weight: 500;
-  text-transform: capitalize;
-}
-
-.post-offices-list {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  max-height: 300px;
-  overflow-y: auto;
-}
-
-.post-office-item {
-  display: flex;
-  justify-content: space-between;
   align-items: center;
-  padding: 0.6rem 1rem;
-  background: #f8fafc;
-  border-radius: 8px;
-  border: 1px solid #e2e8f0;
+  gap: 2px;
 }
 
-.office-name {
-  font-size: 0.9rem;
-  color: #334155;
-  text-transform: capitalize;
-}
-
-.office-type {
-  font-size: 0.75rem;
-  padding: 0.2rem 0.6rem;
-  border-radius: 20px;
-  font-weight: 600;
-}
-
-.office-type.delivery {
-  background: #dcfce7;
-  color: #16a34a;
-}
-
-.office-type.non-delivery {
-  background: #fee2e2;
-  color: #dc2626;
-}
-
-.suggestion-card {
-  border: 2px solid #f97316;
-}
-
-.suggestion-content {
-  display: flex;
-  align-items: center;
-  gap: 2rem;
-}
-
-.suggested-pin {
-  font-size: 2.5rem;
+.stamp-text {
+  font-size: 9px;
   font-weight: 800;
-  color: #f97316;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.stamp-valid .stamp-text { color: #16a34a; }
+.stamp-invalid .stamp-text { color: #dc2626; }
+
+.stamp-pin {
+  font-family: 'Space Mono', monospace;
+  font-size: 18px;
+  font-weight: 700;
   letter-spacing: 2px;
 }
 
-.suggestion-details p {
-  color: #475569;
-  margin-bottom: 0.3rem;
-  font-size: 0.95rem;
+.stamp-valid .stamp-pin { color: #15803d; }
+.stamp-invalid .stamp-pin { color: #b91c1c; }
+
+.postmark-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: #1c1917;
+  margin-bottom: 4px;
 }
 
-.ml-card {
-  border-left: 4px solid #6366f1;
+.postmark-msg {
+  font-size: 14px;
+  color: #57534e;
+  line-height: 1.5;
 }
 
-.ml-card p {
-  color: #475569;
-  font-size: 0.95rem;
+/* ---- Card ---- */
+.card {
+  background: #fff;
+  border: 1px solid #e7e5e4;
+  border-radius: 10px;
+  padding: 20px 24px;
 }
 
-.hint {
-  margin-top: 0.5rem;
-  color: #f97316 !important;
-  font-weight: 600 !important;
+.card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.card-header.clickable {
+  cursor: pointer;
+  margin-bottom: 0;
+}
+
+.card-icon {
+  color: #a8a29e;
+  display: flex;
+  align-items: center;
+}
+
+.suggestion-icon { color: #ea580c; }
+
+.card-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: #78716c;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  flex: 1;
+}
+
+.pill {
+  font-size: 11px;
+  font-weight: 700;
+  background: #f5f5f4;
+  color: #57534e;
+  padding: 2px 10px;
+  border-radius: 10px;
+}
+
+/* Chevron for collapsible */
+.chevron {
+  transition: transform 0.2s;
+}
+.chevron.open {
+  transform: rotate(180deg);
+}
+
+/* ---- Detail Rows ---- */
+.detail-rows {
+  display: flex;
+  flex-direction: column;
+}
+
+.detail-row {
+  display: flex;
+  padding: 10px 0;
+  border-bottom: 1px solid #f5f5f4;
+  font-size: 14px;
+}
+
+.detail-row:last-child { border-bottom: none; }
+
+.detail-row.compact {
+  padding: 6px 0;
+}
+
+.detail-key {
+  width: 100px;
+  flex-shrink: 0;
+  color: #a8a29e;
+  font-weight: 500;
+  font-size: 13px;
+}
+
+.detail-val {
+  color: #1c1917;
+}
+
+.mono {
+  font-family: 'Space Mono', monospace;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+}
+
+/* ---- Info Grid ---- */
+.info-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+
+.info-cell {
+  background: #fafaf9;
+  border: 1px solid #f5f5f4;
+  border-radius: 8px;
+  padding: 14px 16px;
+}
+
+.cell-label {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  color: #a8a29e;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 4px;
+}
+
+.cell-value {
+  display: block;
+  font-size: 14px;
+  font-weight: 500;
+  color: #1c1917;
+  text-transform: capitalize;
+}
+
+/* ---- Post Offices ---- */
+.office-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+.office-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  border-radius: 6px;
+  background: #fafaf9;
+  transition: background 0.1s;
+}
+
+.office-item:hover {
+  background: #f5f5f4;
+}
+
+.office-name {
+  font-size: 13px;
+  color: #44403c;
+  text-transform: capitalize;
+}
+
+/* Badges */
+.badge {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 10px;
+  border-radius: 4px;
+  letter-spacing: 0.02em;
+}
+
+.badge-green {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.badge-red {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.badge-gray {
+  background: #f5f5f4;
+  color: #78716c;
+}
+
+/* ---- Suggestion ---- */
+.card-suggestion {
+  border-color: #fed7aa;
+  background: #fffbeb;
+}
+
+.suggestion-body {
+  display: flex;
+  align-items: center;
+  gap: 32px;
+}
+
+.suggestion-pin-wrap {
+  flex-shrink: 0;
+  text-align: center;
+}
+
+.suggestion-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #a8a29e;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.suggestion-pin {
+  font-family: 'Space Mono', monospace;
+  font-size: 36px;
+  font-weight: 700;
+  color: #ea580c;
+  letter-spacing: 3px;
+}
+
+.suggestion-details {
+  flex: 1;
+}
+
+/* ---- ML ---- */
+.ml-text {
+  font-size: 14px;
+  color: #57534e;
+  line-height: 1.5;
+}
+
+.ml-hint {
+  font-size: 13px;
+  color: #ea580c;
+  font-weight: 600;
+  margin-top: 6px;
+}
+
+/* ---- OCR ---- */
+.ocr-text {
+  background: #fafaf9;
+  border: 1px solid #e7e5e4;
+  border-radius: 6px;
+  padding: 16px;
+  margin-top: 12px;
+  font-size: 12px;
+  font-family: 'Space Mono', monospace;
+  color: #78716c;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 200px;
+  overflow-y: auto;
+  line-height: 1.6;
+}
+
+/* ---- Responsive ---- */
+@media (max-width: 640px) {
+  .postmark-card {
+    flex-direction: column;
+    gap: 16px;
+    text-align: center;
+    padding: 24px 20px;
+  }
+
+  .info-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .suggestion-body {
+    flex-direction: column;
+    gap: 16px;
+  }
 }

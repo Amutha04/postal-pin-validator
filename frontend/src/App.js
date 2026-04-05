@@ -14,8 +14,8 @@ function App() {
     <div className="app">
       <Header />
       <main className="main-content">
-        <UploadSection 
-          setResult={setResult} 
+        <UploadSection
+          setResult={setResult}
           setLoading={setLoading}
           loading={loading}
         />

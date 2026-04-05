@@ -1,17 +1,23 @@
 import React from 'react';
 import './Header.css';
-import { MdLocalPostOffice } from 'react-icons/md';
 
 function Header() {
   return (
     <header className="header">
-      <div className="header-content">
-        <div className="header-logo">
-          <MdLocalPostOffice size={36} color="white" />
+      <div className="header-inner">
+        <div className="header-left">
+          <div className="envelope-icon">
+            <div className="env-body">
+              <div className="env-flap"></div>
+            </div>
+          </div>
+          <div>
+            <span className="brand">PINCheck</span>
+            <span className="brand-dot">.</span>
+          </div>
         </div>
-        <div className="header-text">
-          <h1>Indian Postal PIN Validator</h1>
-          <p>Upload envelope image to validate PIN code</p>
+        <div className="header-right">
+          <span className="header-badge">INDIA POST</span>
         </div>
       </div>
     </header>

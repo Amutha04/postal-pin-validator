@@ -17,9 +17,9 @@ try:
         le_state = pickle.load(f)
     with open(f"{MODEL_PATH}/le_circle.pkl", "rb") as f:
         le_circle = pickle.load(f)
-    print("✅ ML model loaded successfully!")
+    print("[OK] ML model loaded successfully!")
 except Exception as e:
-    print(f"❌ ML model loading failed: {e}")
+    print(f"[ERROR] ML model loading failed: {e}")
     model = None
 
 def validate_pin_with_ml(pincode, district, state, circle):
