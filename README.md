@@ -163,7 +163,6 @@ MONGO_URI=mongodb://localhost:27017/
 DB_NAME=postal_db
 GEMINI_API_KEY=your-gemini-api-key-here
 USE_GEMINI=true
-SECRET_KEY=your-secret-key
 ```
 
 | Variable | Required | Description |
