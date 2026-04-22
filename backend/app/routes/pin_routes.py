@@ -2,6 +2,8 @@ from flask import Blueprint, request, jsonify
 from config import Config
 from app.services.ocr_service import extract_text
 from app.services.pin_service import extract_pincode, extract_address_keywords, validate_pin
+from app.models.postal_model import get_by_pincode, get_post_offices_by_pincode, get_nearby_pincodes
+from app.services.ml_service import validate_pin_with_ml
 
 pin_bp = Blueprint('pin', __name__)
 
@@ -19,6 +21,89 @@ def health():
     """Check if API is running"""
     ocr_engine = "Gemini 2.5 Flash" if extract_with_gemini else "EasyOCR"
     return jsonify({"status": "API is running", "ocr_engine": ocr_engine}), 200
+
+
+@pin_bp.route('/lookup', methods=['POST'])
+def lookup():
+    """Manual PIN lookup — no image needed"""
+    try:
+        data = request.get_json()
+        pincode = data.get('pincode', '').strip()
+
+        if not pincode or len(pincode) != 6 or not pincode.isdigit():
+            return jsonify({"error": "Please enter a valid 6-digit PIN code"}), 400
+
+        records = get_by_pincode(pincode)
+
+        if not records:
+            return jsonify({
+                "valid": False,
+                "message": "PIN code does not exist in database",
+                "pincode": pincode
+            }), 200
+
+        first = records[0]
+        district = first.get("district", "")
+        state = first.get("statename", "")
+        circle = first.get("circlename", "")
+
+        ml_result = {"ml_valid": None, "message": "ML skipped"}
+        if district and state and circle:
+            ml_result = validate_pin_with_ml(pincode, district, state, circle)
+
+        post_offices = get_post_offices_by_pincode(pincode)
+
+        return jsonify({
+            "valid": True,
+            "message": "PIN code found",
+            "pincode": pincode,
+            "district": district,
+            "state": state,
+            "circle": circle,
+            "region": first.get("regionname"),
+            "division": first.get("divisionname"),
+            "latitude": first.get("latitude"),
+            "longitude": first.get("longitude"),
+            "post_offices": post_offices[:10],
+            "ml_validation": ml_result,
+            "lookup": True
+        }), 200
+
+    except Exception as e:
+        print(f"[ERROR] {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@pin_bp.route('/nearby', methods=['POST'])
+def nearby():
+    """Find nearby PIN codes given lat/lng"""
+    try:
+        data = request.get_json()
+        lat = float(data.get('lat', 0))
+        lng = float(data.get('lng', 0))
+        exclude_pin = data.get('exclude', '')
+
+        results = get_nearby_pincodes(lat, lng)
+        nearby = []
+        for r in results:
+            pin = str(r.get('pincode', ''))
+            if pin == str(exclude_pin):
+                continue
+            rlat = r.get('latitude')
+            rlng = r.get('longitude')
+            if rlat and rlng and rlat != 'NA' and rlng != 'NA':
+                nearby.append({
+                    'pincode': pin,
+                    'officename': r.get('officename', ''),
+                    'district': r.get('district', ''),
+                    'latitude': float(rlat),
+                    'longitude': float(rlng),
+                    'delivery': r.get('delivery', ''),
+                })
+        return jsonify(nearby), 200
+    except Exception as e:
+        print(f"[ERROR] {e}")
+        return jsonify([]), 200
 
 
 @pin_bp.route('/validate', methods=['POST'])

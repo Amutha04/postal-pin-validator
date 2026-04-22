@@ -143,6 +143,84 @@
   transform: rotate(180deg);
 }
 
+/* ---- Map ---- */
+.card-map {
+  padding-bottom: 0;
+}
+
+.map-link {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #dc2626;
+  text-decoration: none;
+  transition: opacity 0.15s;
+}
+
+.map-link:hover {
+  opacity: 0.7;
+}
+
+.map-container {
+  height: 340px;
+  border-radius: 0 0 10px 10px;
+  margin: 0 -24px -20px;
+  overflow: hidden;
+}
+
+.map-pin-icon {
+  background: none;
+  border: none;
+}
+
+/* Fix leaflet z-index */
+.leaflet-pane { z-index: 1; }
+.leaflet-control { z-index: 2; }
+
+/* ---- Copy Buttons ---- */
+.copy-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid #e7e5e4;
+  border-radius: 6px;
+  background: #fff;
+  color: #a8a29e;
+  cursor: pointer;
+  margin-left: 8px;
+  vertical-align: middle;
+  transition: all 0.15s;
+}
+
+.copy-btn:hover {
+  color: #dc2626;
+  border-color: #dc2626;
+}
+
+.copy-btn-inline {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: #a8a29e;
+  cursor: pointer;
+  margin-left: 6px;
+  vertical-align: middle;
+  transition: color 0.15s;
+}
+
+.copy-btn-inline:hover {
+  color: #dc2626;
+}
+
 /* ---- Detail Rows ---- */
 .detail-rows {
   display: flex;
