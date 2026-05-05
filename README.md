@@ -4,7 +4,7 @@
 ![Flask](https://img.shields.io/badge/Flask-3.x-black?style=flat-square&logo=flask)
 ![React](https://img.shields.io/badge/React-18.x-61DAFB?style=flat-square&logo=react)
 ![MongoDB](https://img.shields.io/badge/MongoDB-7.x-47A248?style=flat-square&logo=mongodb)
-![Gemini](https://img.shields.io/badge/Gemini-2.5_Flash-4285F4?style=flat-square&logo=google)
+![Groq](https://img.shields.io/badge/Groq-Llama_4_Scout-F55036?style=flat-square&logo=meta)
 ![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)
 
 > A web application that validates Indian Postal PIN codes against addresses by reading envelope images using AI-powered OCR and Machine Learning.
@@ -15,7 +15,7 @@
 
 Indian PIN codes are unique to each location. People often write incorrect or mismatched PIN codes on envelopes, causing delivery failures. This system solves that by:
 
-- Scanning envelope images using **Gemini 2.5 Flash Vision AI** (with EasyOCR as fallback)
+- Scanning envelope images using **Groq Llama 4 Scout Vision** (with EasyOCR as fallback)
 - Extracting the PIN code, recipient name, address, city, district, and state
 - Validating against **157,000+ official India Post records** in MongoDB
 - Suggesting the **correct PIN** using hierarchical search if a mismatch is found
@@ -26,7 +26,7 @@ Indian PIN codes are unique to each location. People often write incorrect or mi
 ## Features
 
 - **Image Upload** - Drag & drop or click to upload printed/handwritten envelope images
-- **AI-Powered OCR** - Gemini 2.5 Flash reads handwritten text, handles rotated images, colored envelopes
+- **AI-Powered OCR** - Groq Llama 4 Scout reads handwritten text, handles rotated images, colored envelopes
 - **EasyOCR Fallback** - Works offline with EasyOCR + OpenCV preprocessing (CLAHE, adaptive threshold)
 - **PIN Validation** - Validates PIN against 157,000+ Indian postal records in MongoDB
 - **ML Validation** - Random Forest model validates PIN prefix matches the region
@@ -43,7 +43,7 @@ Indian PIN codes are unique to each location. People often write incorrect or mi
 | Frontend | React 18, Axios, React Icons, React Toastify |
 | Backend | Python 3.13+, Flask, Flask-CORS |
 | Database | MongoDB 7.0+ |
-| OCR (Primary) | Google Gemini 2.5 Flash Vision API |
+| OCR (Primary) | Groq Llama 4 Scout 17B Vision (multimodal LLM) |
 | OCR (Fallback) | EasyOCR 1.7 + OpenCV |
 | Machine Learning | Random Forest Classifier (scikit-learn) |
 | Dataset | India Post Official PIN Directory (157,000+ records) |
@@ -58,9 +58,9 @@ postal-pin-validator/
 |-- backend/                         <- Flask API
 |   |-- app/
 |   |   |-- routes/
-|   |   |   +-- pin_routes.py        <- API endpoints (Gemini + Tesseract routing)
+|   |   |   +-- pin_routes.py        <- API endpoints (Groq + EasyOCR routing)
 |   |   |-- services/
-|   |   |   |-- gemini_ocr_service.py <- Gemini 2.5 Flash Vision integration
+|   |   |   |-- groq_ocr_service.py  <- Groq Llama 4 Scout vision integration
 |   |   |   |-- ocr_service.py       <- EasyOCR with preprocessing pipeline
 |   |   |   |-- pin_service.py       <- PIN extraction + validation logic
 |   |   |   +-- ml_service.py        <- Random Forest ML validation
@@ -97,7 +97,7 @@ postal-pin-validator/
 Upload Envelope Image
          |
          v
-Gemini 2.5 Flash Vision AI  (or EasyOCR fallback)
+Groq Llama 4 Scout Vision  (or EasyOCR fallback)
    - Reads handwritten/printed text
    - Extracts recipient, sender, PIN, address
    - Returns structured JSON
@@ -134,7 +134,7 @@ Result
 - **Node.js 18+**
 - **MongoDB 7.0+** (Community Edition, running on localhost:27017)
 - **Git**
-- **Gemini API Key** (free) - get it from https://aistudio.google.com/apikey
+- **Groq API Key** (free) - get it from https://console.groq.com/keys
 - No extra system installs needed — EasyOCR is included in pip dependencies
 
 ### Step 1: Clone the repository
@@ -161,15 +161,15 @@ Create a file named `.env` inside the `backend/` folder:
 ```env
 MONGO_URI=mongodb://localhost:27017/
 DB_NAME=postal_db
-GEMINI_API_KEY=your-gemini-api-key-here
-USE_GEMINI=true
+GROQ_API_KEY=your-groq-api-key-here
+USE_GROQ=true
 SECRET_KEY=your-secret-key
 ```
 
 | Variable | Required | Description |
 |---|---|---|
-| `GEMINI_API_KEY` | Yes (if USE_GEMINI=true) | Free API key from Google AI Studio |
-| `USE_GEMINI` | No | Set `true` for Gemini Vision, `false` for Tesseract. Default: `false` |
+| `GROQ_API_KEY` | Yes (if USE_GROQ=true) | Free API key from Groq Console. Supports comma-separated rotation: `key1,key2,key3` |
+| `USE_GROQ` | No | Set `true` for Groq vision, `false` to use EasyOCR only. Default: `false` |
 | `MONGO_URI` | No | MongoDB connection string. Default: `mongodb://localhost:27017/` |
 | `DB_NAME` | No | Database name. Default: `postal_db` |
 
@@ -238,8 +238,8 @@ React app runs at **http://localhost:3000**
   "post_offices": [...],
   "ml_validation": { "ml_valid": true, "predicted_prefix": "175" },
   "extracted_text": "Mrs. Jeevan Jyoti, SHAMSHI, Distt. Kullu (H.P), PIN 175126",
-  "ocr_engine": "Gemini 2.5 Flash",
-  "gemini_data": {
+  "ocr_engine": "Groq Llama 4 Scout",
+  "groq_data": {
     "recipient": { "name": "Mrs. Jeevan Jyoti", "state": "Himachal Pradesh", "pincode": "175126" },
     "sender": { "name": "JAGANNATH MANI", "city": "Bangalore" }
   }
@@ -277,23 +277,24 @@ The ML model acts as a secondary validation layer. After MongoDB confirms the PI
 
 ## OCR Comparison
 
-| Feature | Gemini 2.5 Flash | EasyOCR (fallback) |
+| Feature | Groq Llama 4 Scout | EasyOCR (fallback) |
 |---|---|---|
 | Handwritten text | Excellent | Good |
 | Colored envelopes | Handles well | Needs preprocessing |
 | Rotated images | Auto-handles | Auto-rotation built in |
 | Hindi/regional text | Supported | Supported (80+ languages) |
-| Speed | ~2-3 seconds | ~5-10 seconds |
+| Speed | ~3-5 seconds | ~5-10 seconds |
 | Offline support | No (needs internet) | Yes |
 | Cost | Free tier available | Free |
 | System install | None (API) | None (pip install) |
+| Key rotation | Yes (comma-separated `GROQ_API_KEY`) | N/A |
 
 ---
 
 ## Acknowledgements
 
 - [India Post](https://www.indiapost.gov.in/) for the official PIN directory dataset
-- [Google Gemini](https://ai.google.dev/) for Vision AI
+- [Groq](https://groq.com/) for fast Llama 4 Scout vision inference
 - [EasyOCR](https://github.com/JaidedAI/EasyOCR) for offline text extraction
 - [scikit-learn](https://scikit-learn.org/) for the Random Forest implementation
 

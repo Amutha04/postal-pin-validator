@@ -7,19 +7,19 @@ from app.services.ml_service import validate_pin_with_ml
 
 pin_bp = Blueprint('pin', __name__)
 
-# Load Gemini service only if enabled
-if Config.USE_GEMINI and Config.GEMINI_API_KEYS:
-    from app.services.gemini_ocr_service import extract_with_gemini
-    print("[OK] Gemini OCR enabled")
+# Load Groq service only if enabled
+if Config.USE_GROQ and Config.GROQ_API_KEYS:
+    from app.services.groq_ocr_service import extract_with_groq
+    print(f"[OK] Groq OCR enabled (Llama 4 Scout vision) — {len(Config.GROQ_API_KEYS)} key(s) loaded")
 else:
-    extract_with_gemini = None
-    print("[INFO] Using EasyOCR (Gemini not configured)")
+    extract_with_groq = None
+    print("[INFO] Using EasyOCR (Groq not configured)")
 
 
 @pin_bp.route('/health', methods=['GET'])
 def health():
     """Check if API is running"""
-    ocr_engine = "Gemini 2.5 Flash" if extract_with_gemini else "EasyOCR"
+    ocr_engine = "Groq Llama 4 Scout" if extract_with_groq else "EasyOCR"
     return jsonify({"status": "API is running", "ocr_engine": ocr_engine}), 200
 
 
@@ -126,26 +126,26 @@ def validate():
         image_bytes = image_file.read()
         print("[INFO] Image bytes length:", len(image_bytes))
 
-        # ── Gemini Vision path ──
-        if extract_with_gemini:
-            print("[INFO] Using Gemini Vision...")
-            gemini_result = extract_with_gemini(image_bytes)
+        # ── Groq Vision path ──
+        if extract_with_groq:
+            print("[INFO] Using Groq Vision...")
+            groq_result = extract_with_groq(image_bytes)
 
-            if "error" in gemini_result:
-                print("[ERROR] Gemini failed, falling back to EasyOCR...")
-                return _process_with_tesseract(image_bytes)
+            if "error" in groq_result or not groq_result.get("text"):
+                print("[INFO] Groq unavailable or returned no text, falling back to EasyOCR...")
+                return _process_with_easyocr(image_bytes)
 
-            extracted_text = gemini_result["text"]
-            pincode = gemini_result.get("pincode") or None
+            extracted_text = groq_result["text"]
+            pincode = groq_result.get("pincode") or None
 
-            # If Gemini didn't extract a PIN, try the regex extractor
+            # If Groq didn't extract a PIN, try the regex extractor
             if not pincode:
                 pincode = extract_pincode(extracted_text)
 
             keywords = extract_address_keywords(extracted_text)
 
             # Also add structured fields as keywords for better matching
-            structured = gemini_result.get("structured")
+            structured = groq_result.get("structured")
             if structured:
                 recipient = structured.get("recipient", {})
                 for field in ["city", "district", "state"]:
@@ -163,23 +163,21 @@ def validate():
             result = validate_pin(pincode, keywords, extracted_text)
             result["extracted_text"] = extracted_text
             result["extracted_pin"] = pincode
-            result["ocr_engine"] = "Gemini 2.5 Flash"
+            result["ocr_engine"] = "Groq Llama 4 Scout"
             if structured:
-                result["gemini_data"] = structured
+                result["groq_data"] = structured
 
             return jsonify(result), 200
 
-        # ── Tesseract fallback path ──
-        if "error" in gemini_result or not gemini_result.get("text"):
-            print("[INFO] Gemini returned no usable result, falling back to EasyOCR...")
-            return _process_with_tesseract(image_bytes)
+        # ── EasyOCR path (Groq disabled) ──
+        return _process_with_easyocr(image_bytes)
 
     except Exception as e:
         print(f"[ERROR] {e}")
         return jsonify({"error": str(e)}), 500
 
 
-def _process_with_tesseract(image_bytes):
+def _process_with_easyocr(image_bytes):
     """EasyOCR-based processing"""
     print("[INFO] Starting EasyOCR...")
     extracted_text = extract_text(image_bytes)

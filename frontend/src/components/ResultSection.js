@@ -10,7 +10,7 @@ function ResultSection({ result }) {
   const isValid = result.valid;
   const [showOcr, setShowOcr] = useState(false);
   const [nearbyPins, setNearbyPins] = useState([]);
-  const recipient = result.gemini_data?.recipient;
+  const recipient = result.groq_data?.recipient;
 
   const hasCoords = result.latitude && result.longitude &&
     result.latitude !== 'NA' && result.longitude !== 'NA' &&
