@@ -35,6 +35,23 @@ def preprocess_adaptive(img):
         cv2.THRESH_BINARY, 31, 10
     )
 
+def preprocess_otsu(img):
+    """OTSU binarization — best for printed text on plain backgrounds"""
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    # Scale up for better character recognition
+    scaled = cv2.resize(gray, None, fx=2, fy=2, interpolation=cv2.INTER_CUBIC)
+    # Remove noise before thresholding
+    blurred = cv2.GaussianBlur(scaled, (3, 3), 0)
+    _, binary = cv2.threshold(blurred, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    return binary
+
+def preprocess_sharpen(img):
+    """Sharpening — helps when image is slightly blurry"""
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    scaled = cv2.resize(gray, None, fx=2, fy=2, interpolation=cv2.INTER_CUBIC)
+    kernel = np.array([[0, -1, 0], [-1, 5, -1], [0, -1, 0]])
+    return cv2.filter2D(scaled, -1, kernel)
+
 
 def score_ocr_result(text):
     """Score OCR quality — PIN detection is the top priority"""
@@ -82,6 +99,20 @@ def extract_text(image_bytes):
         text_adaptive = run_easyocr(adaptive_img)
         candidates.append(text_adaptive)
         print(f"[OK] Adaptive: score={score_ocr_result(text_adaptive)}")
+
+        # Method 4: OTSU binarization (add after Method 3)
+        print("[INFO] EasyOCR: trying OTSU binarization...")
+        otsu_img = preprocess_otsu(img)
+        text_otsu = run_easyocr(otsu_img)
+        candidates.append(text_otsu)
+        print(f"[OK] OTSU: score={score_ocr_result(text_otsu)}")
+
+        # Method 5: Sharpening
+        print("[INFO] EasyOCR: trying sharpening...")
+        sharp_img = preprocess_sharpen(img)
+        text_sharp = run_easyocr(sharp_img)
+        candidates.append(text_sharp)
+        print(f"[OK] Sharp: score={score_ocr_result(text_sharp)}")
 
         # If no PIN found in any, try 180-degree rotation
         best_so_far = max(candidates, key=score_ocr_result)

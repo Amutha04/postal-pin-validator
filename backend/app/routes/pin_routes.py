@@ -8,7 +8,7 @@ from app.services.ml_service import validate_pin_with_ml
 pin_bp = Blueprint('pin', __name__)
 
 # Load Gemini service only if enabled
-if Config.USE_GEMINI and Config.GEMINI_API_KEY:
+if Config.USE_GEMINI and Config.GEMINI_API_KEYS:
     from app.services.gemini_ocr_service import extract_with_gemini
     print("[OK] Gemini OCR enabled")
 else:
@@ -170,7 +170,8 @@ def validate():
             return jsonify(result), 200
 
         # ── Tesseract fallback path ──
-        else:
+        if "error" in gemini_result or not gemini_result.get("text"):
+            print("[INFO] Gemini returned no usable result, falling back to EasyOCR...")
             return _process_with_tesseract(image_bytes)
 
     except Exception as e:

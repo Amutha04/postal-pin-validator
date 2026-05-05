@@ -348,51 +348,6 @@ function ResultSection({ result }) {
           </div>
         </div>
       )}
-
-      {/* ---- ML Validation ---- */}
-      {result.ml_validation?.ml_valid !== null && result.ml_validation?.ml_valid !== undefined && (
-        <div className="card">
-          <div className="card-header">
-            <div className="card-icon">
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                <rect x="1" y="8" width="3" height="6" rx="1" stroke="currentColor" strokeWidth="1.5" fill="none"/>
-                <rect x="6.5" y="4" width="3" height="10" rx="1" stroke="currentColor" strokeWidth="1.5" fill="none"/>
-                <rect x="12" y="1" width="3" height="13" rx="1" stroke="currentColor" strokeWidth="1.5" fill="none"/>
-              </svg>
-            </div>
-            <h3 className="card-label">ML Validation</h3>
-            <span className={`badge ${result.ml_validation.ml_valid ? 'badge-green' : 'badge-red'}`}>
-              {result.ml_validation.ml_valid ? 'PASS' : 'FAIL'}
-            </span>
-          </div>
-          <p className="ml-text">{result.ml_validation.message}</p>
-          {result.ml_validation.hint && <p className="ml-hint">{result.ml_validation.hint}</p>}
-        </div>
-      )}
-
-      {/* ---- OCR Text (collapsible) ---- */}
-      {result.extracted_text && (
-        <div className="card">
-          <div className="card-header clickable" onClick={() => setShowOcr(!showOcr)}>
-            <div className="card-icon">
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                <rect x="2" y="2" width="12" height="12" rx="2" stroke="currentColor" strokeWidth="1.5" fill="none"/>
-                <path d="M5 6h6M5 8.5h4M5 11h5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-              </svg>
-            </div>
-            <h3 className="card-label">Extracted Text</h3>
-            <svg
-              width="16" height="16" viewBox="0 0 16 16" fill="none"
-              className={`chevron ${showOcr ? 'open' : ''}`}
-            >
-              <path d="M4 6l4 4 4-4" stroke="#a8a29e" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
-          </div>
-          {showOcr && (
-            <pre className="ocr-text">{result.extracted_text}</pre>
-          )}
-        </div>
-      )}
     </div>
   );
 }
