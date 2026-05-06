@@ -3,12 +3,25 @@ import './UploadSection.css';
 import axios from 'axios';
 import { toast } from 'react-toastify';
 import BulkResults from './BulkResults';
+import Dashboard from './Dashboard';
 import ResultSection from './ResultSection';
 import API_BASE_URL from '../apiConfig';
 
-function UploadSection() {
+const HISTORY_STORAGE_KEY = 'pincheck_validation_history';
+
+const getDisplayTime = () => new Date().toLocaleString([], {
+  month: 'short',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+});
+
+const getHistoryDate = () => new Date().toISOString().slice(0, 10);
+
+function UploadSection({ authToken, user }) {
   const [mode, setMode] = useState('scan');
   const [loading, setLoading] = useState(false);
+  const [showSlowOcrHint, setShowSlowOcrHint] = useState(false);
   const [scanResult, setScanResult] = useState(null);
   const [lookupResult, setLookupResult] = useState(null);
   const [image, setImage] = useState(null);
@@ -17,6 +30,13 @@ function UploadSection() {
   const [pinInput, setPinInput] = useState('');
   const [bulkFiles, setBulkFiles] = useState([]);
   const [bulkResults, setBulkResults] = useState([]);
+  const [history, setHistory] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem(HISTORY_STORAGE_KEY)) || [];
+    } catch (error) {
+      return [];
+    }
+  });
   const [bulkProgress, setBulkProgress] = useState({ current: 0, total: 0, running: false });
 
   // Live scanner state
@@ -32,7 +52,110 @@ function UploadSection() {
   const fileInputRef = useRef(null);
   const cameraInputRef = useRef(null);
   const bulkInputRef = useRef(null);
+  const slowHintTimerRef = useRef(null);
   const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+
+  const normalizeResult = useCallback((source, data, filename = '-') => {
+    const recipient = data.groq_data?.recipient;
+    return {
+      id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+      date: getHistoryDate(),
+      time: getDisplayTime(),
+      source,
+      filename,
+      status: data.valid ? 'Valid' : 'Mismatch',
+      pincode: data.pincode || data.extracted_pin || '-',
+      district: data.district || recipient?.district || data.suggestion?.district || data.actual_location?.district || '-',
+      state: data.state || recipient?.state || data.suggestion?.state || data.actual_location?.state || '-',
+      suggestion: data.suggestion?.suggested_pin || '-',
+      message: data.message || '',
+      ocr_engine: data.ocr_engine || (data.lookup ? 'Manual lookup' : '-'),
+    };
+  }, []);
+
+  const normalizeError = useCallback((source, filename, message) => ({
+    id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    date: getHistoryDate(),
+    time: getDisplayTime(),
+    source,
+    filename,
+    status: 'Error',
+    pincode: '-',
+    district: '-',
+    state: '-',
+    suggestion: '-',
+    message: message || 'Failed',
+    ocr_engine: '-',
+  }), []);
+
+  const appendHistory = useCallback((items) => {
+    const rows = Array.isArray(items) ? items : [items];
+    setHistory(prev => [...rows, ...prev].slice(0, 250));
+    if (authToken) {
+      axios.post(`${API_BASE_URL}/api/history`, { rows }, {
+        headers: { Authorization: `Bearer ${authToken}` },
+      }).catch(() => {
+        toast.error('Could not save dashboard history');
+      });
+    }
+  }, [authToken]);
+
+  const clearHistory = () => {
+    setHistory([]);
+    if (authToken) {
+      axios.delete(`${API_BASE_URL}/api/history`, {
+        headers: { Authorization: `Bearer ${authToken}` },
+      }).catch(() => {
+        toast.error('Could not clear saved history');
+      });
+    }
+    toast.success('Dashboard history cleared');
+  };
+
+  useEffect(() => {
+    if (!authToken) {
+      localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(history));
+    }
+  }, [authToken, history]);
+
+  useEffect(() => {
+    if (!authToken) {
+      try {
+        setHistory(JSON.parse(localStorage.getItem(HISTORY_STORAGE_KEY)) || []);
+      } catch (error) {
+        setHistory([]);
+      }
+      return;
+    }
+
+    axios.get(`${API_BASE_URL}/api/history`, {
+      headers: { Authorization: `Bearer ${authToken}` },
+    }).then((response) => {
+      setHistory(response.data.history || []);
+    }).catch(() => {
+      toast.error('Could not load saved dashboard history');
+    });
+  }, [authToken]);
+
+  const startSlowOcrHint = useCallback(() => {
+    if (slowHintTimerRef.current) {
+      clearTimeout(slowHintTimerRef.current);
+    }
+    setShowSlowOcrHint(false);
+    slowHintTimerRef.current = setTimeout(() => {
+      setShowSlowOcrHint(true);
+    }, 1200);
+  }, []);
+
+  const stopSlowOcrHint = useCallback(() => {
+    if (slowHintTimerRef.current) {
+      clearTimeout(slowHintTimerRef.current);
+      slowHintTimerRef.current = null;
+    }
+    setShowSlowOcrHint(false);
+  }, []);
+
+  useEffect(() => () => stopSlowOcrHint(), [stopSlowOcrHint]);
 
   // ---- Single scan handlers ----
   const handleFile = (file) => {
@@ -49,17 +172,21 @@ function UploadSection() {
     formData.append('image', image);
     try {
       setLoading(true);
+      startSlowOcrHint();
       const response = await axios.post(
         `${API_BASE_URL}/api/validate`,
         formData,
         { headers: { 'Content-Type': 'multipart/form-data' } }
       );
       setScanResult(response.data);
+      appendHistory(normalizeResult('Scan', response.data, image.name));
       toast.success('Validation complete');
     } catch (error) {
       const msg = error.response?.data?.error || 'Something went wrong';
+      appendHistory(normalizeError('Scan', image.name, msg));
       toast.error(msg);
     } finally {
+      stopSlowOcrHint();
       setLoading(false);
     }
   };
@@ -79,6 +206,7 @@ function UploadSection() {
         { headers: { 'Content-Type': 'application/json' } }
       );
       setLookupResult(response.data);
+      appendHistory(normalizeResult('Lookup', response.data, pin));
       if (response.data.valid) {
         toast.success('PIN code found');
         setPinInput(''); // FIX 6: clear input so placeholder reappears
@@ -88,6 +216,7 @@ function UploadSection() {
       }
     } catch (error) {
       const msg = error.response?.data?.error || 'Something went wrong';
+      appendHistory(normalizeError('Lookup', pin, msg));
       toast.error(msg);
     } finally {
       setLoading(false);
@@ -135,30 +264,21 @@ function UploadSection() {
       formData.append('image', file);
       setBulkProgress(prev => ({ ...prev, current: i + 1 }));
       try {
+        startSlowOcrHint();
         const response = await axios.post(
           `${API_BASE_URL}/api/validate`, formData,
           { headers: { 'Content-Type': 'multipart/form-data' } }
         );
-        const data = response.data;
-        const recipient = data.groq_data?.recipient;
-        const resultRow = {
-          filename: file.name,
-          status: data.valid ? 'Valid' : 'Mismatch',
-          pincode: data.pincode || data.extracted_pin || '-',
-          district: data.district || recipient?.district || data.suggestion?.district || data.actual_location?.district || '-',
-          state: data.state || recipient?.state || data.suggestion?.state || data.actual_location?.state || '-',
-          suggestion: data.suggestion?.suggested_pin || '-',
-          message: data.message || '',
-          ocr_engine: data.ocr_engine || '-',
-        };
+        const resultRow = normalizeResult('Bulk', response.data, file.name);
         setBulkResults(prev => [...prev, resultRow]);
+        appendHistory(resultRow);
       } catch (error) {
-        setBulkResults(prev => [...prev, {
-          filename: file.name, status: 'Error', pincode: '-',
-          district: '-', state: '-', suggestion: '-',
-          message: error.response?.data?.error || 'Failed', ocr_engine: '-',
-        }]);
+        const msg = error.response?.data?.error || 'Failed';
+        const errorRow = normalizeError('Bulk', file.name, msg);
+        setBulkResults(prev => [...prev, errorRow]);
+        appendHistory(errorRow);
       }
+      stopSlowOcrHint();
     }
     const processedCount = bulkFiles.length;
     setBulkFiles([]);
@@ -216,6 +336,7 @@ function UploadSection() {
       if (!blob) return;
       setLiveProcessing(true);
       setLiveOverlay(null);
+      startSlowOcrHint();
       const formData = new FormData();
       formData.append('image', blob, `capture-${Date.now()}.jpg`);
       try {
@@ -224,38 +345,25 @@ function UploadSection() {
           { headers: { 'Content-Type': 'multipart/form-data' } }
         );
         const data = response.data;
-        const recipient = data.groq_data?.recipient;
+        const resultRow = normalizeResult('Live', data, `Capture #${liveResults.length + 1}`);
         setLiveOverlay(data.valid ? 'valid' : 'invalid');
-        setLiveResults(prev => [...prev, {
-          filename: `Capture #${prev.length + 1}`,
-          status: data.valid ? 'Valid' : 'Mismatch',
-          pincode: data.pincode || data.extracted_pin || '-',
-          district: data.district || recipient?.district || data.suggestion?.district || data.actual_location?.district || '-',
-          state: data.state || recipient?.state || data.suggestion?.state || data.actual_location?.state || '-',
-          suggestion: data.suggestion?.suggested_pin || '-',
-          message: data.message || '',
-          ocr_engine: data.ocr_engine || '-',
-        }]);
+        setLiveResults(prev => [...prev, resultRow]);
+        appendHistory(resultRow);
         setLiveCount(prev => prev + 1);
       } catch (error) {
+        const msg = error.response?.data?.error || 'Failed';
+        const errorRow = normalizeError('Live', `Capture #${liveResults.length + 1}`, msg);
         setLiveOverlay('error');
-        setLiveResults(prev => [...prev, {
-          filename: `Capture #${prev.length + 1}`,
-          status: 'Error',
-          pincode: '-',
-          district: '-',
-          state: '-',
-          suggestion: '-',
-          message: error.response?.data?.error || 'Failed',
-          ocr_engine: '-',
-        }]);
+        setLiveResults(prev => [...prev, errorRow]);
+        appendHistory(errorRow);
         setLiveCount(prev => prev + 1);
       } finally {
+        stopSlowOcrHint();
         setLiveProcessing(false);
         setTimeout(() => setLiveOverlay(null), 1500);
       }
     }, 'image/jpeg', 0.9);
-  }, [liveProcessing]);
+  }, [appendHistory, liveProcessing, liveResults.length, normalizeError, normalizeResult, startSlowOcrHint, stopSlowOcrHint]);
 
   useEffect(() => {
     if (mode !== 'live' || !cameraActive) return;
@@ -318,6 +426,15 @@ function UploadSection() {
             <circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeWidth="1.5" fill="none"/>
           </svg>
           Live
+        </button>
+        <button className={`mode-btn ${mode === 'dashboard' ? 'active' : ''}`}
+          onClick={() => setMode('dashboard')}>
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <rect x="2" y="8" width="2.5" height="5" rx="1" fill="currentColor"/>
+            <rect x="6.75" y="4" width="2.5" height="9" rx="1" fill="currentColor"/>
+            <rect x="11.5" y="6" width="2.5" height="7" rx="1" fill="currentColor"/>
+          </svg>
+          Dashboard
         </button>
       </div>
 
@@ -388,6 +505,9 @@ function UploadSection() {
               </button>
             )}
           </div>
+          {loading && showSlowOcrHint && (
+            <p className="slow-ocr-hint">Reading envelope... this may take a few seconds.</p>
+          )}
           {scanResult && <ResultSection result={scanResult} />}
         </>
       )}
@@ -476,6 +596,9 @@ function UploadSection() {
               </div>
               <span className="progress-text">Processing {bulkProgress.current} of {bulkProgress.total}...</span>
             </div>
+          )}
+          {bulkProgress.running && showSlowOcrHint && (
+            <p className="slow-ocr-hint">Reading envelope... this may take a few seconds.</p>
           )}
           <div className="actions">
             {(bulkFiles.length > 0 || bulkResults?.length > 0) && (
@@ -603,8 +726,15 @@ function UploadSection() {
               </>
             )}
           </div>
+          {liveProcessing && showSlowOcrHint && (
+            <p className="slow-ocr-hint">Reading envelope... this may take a few seconds.</p>
+          )}
           {liveResults.length > 0 && <BulkResults results={liveResults} />}
         </div>
+      )}
+
+      {mode === 'dashboard' && (
+        <Dashboard history={history} onClear={clearHistory} user={user} />
       )}
     </div>
   );

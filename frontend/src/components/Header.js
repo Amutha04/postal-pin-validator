@@ -1,7 +1,7 @@
 import React from 'react';
 import './Header.css';
 
-function Header() {
+function Header({ user, onLogin, onLogout }) {
   return (
     <header className="header">
       <div className="header-inner">
@@ -18,6 +18,14 @@ function Header() {
         </div>
         <div className="header-right">
           <span className="header-badge">INDIA POST</span>
+          {user ? (
+            <div className="user-menu">
+              <span className="user-name">{user.name}</span>
+              <button className="header-action" onClick={onLogout}>Logout</button>
+            </div>
+          ) : (
+            <button className="header-action" onClick={onLogin}>Login</button>
+          )}
         </div>
       </div>
     </header>

@@ -29,6 +29,7 @@
 /* ---- Mode Toggle ---- */
 .mode-toggle {
   display: flex;
+  flex-wrap: wrap;
   gap: 4px;
   background: #e7e5e4;
   border-radius: 10px;
@@ -286,6 +287,12 @@
 
 @keyframes spin {
   to { transform: rotate(360deg); }
+}
+
+.slow-ocr-hint {
+  margin-top: 12px;
+  font-size: 13px;
+  color: #78716c;
 }
 
 /* ---- Bulk Mode ---- */
@@ -551,4 +558,5 @@
   .actions {
     flex-wrap: wrap;
   }
+
 }

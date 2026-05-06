@@ -234,16 +234,20 @@ def fuzzy_match(word1, word2, threshold=0.75):
     ).ratio()
     return ratio >= threshold
 
+def normalize_location_text(text):
+    return re.sub(r'[^a-z]', '', text.lower())
+
 def find_state_from_keywords(keywords, full_text):
     """
     Step 1 of hierarchical search:
     Find matching state from keywords
     """
     full_lower = full_text.lower()
+    full_normalized = normalize_location_text(full_text)
 
     # Check multi-word states first
     for state in MULTI_WORD_STATES:
-        if state in full_lower:
+        if state in full_lower or normalize_location_text(state) in full_normalized:
             records = get_by_state(state)
             if records:
                 return records[0].get("statename"), records
@@ -252,9 +256,11 @@ def find_state_from_keywords(keywords, full_text):
     for keyword in keywords:
         records = get_by_state(keyword)
         if records:
-            # Verify it's a real state match not partial
-            state_name = records[0].get("statename", "").lower()
-            if fuzzy_match(keyword, state_name) or keyword in state_name:
+            # Verify it's a real state match, not a partial locality match.
+            state_name = records[0].get("statename", "")
+            keyword_norm = normalize_location_text(keyword)
+            state_norm = normalize_location_text(state_name)
+            if keyword_norm == state_norm or fuzzy_match(keyword_norm, state_norm, threshold=0.9):
                 return records[0].get("statename"), records
 
     return None, []
@@ -265,9 +271,19 @@ def find_district_from_keywords(keywords, state_name):
     Find matching district within the found state
     """
     for keyword in keywords:
+        if keyword.lower().strip() in SKIP_WORDS:
+            continue
         records = get_by_state_and_district(state_name, keyword)
-        if records:
-            return records[0].get("district"), records
+        matching_records = [
+            record for record in records
+            if fuzzy_match(
+                normalize_location_text(keyword),
+                normalize_location_text(record.get("district", "")),
+                threshold=0.9
+            )
+        ]
+        if matching_records:
+            return matching_records[0].get("district"), matching_records
 
     return None, []
 
@@ -277,6 +293,8 @@ def find_division_from_keywords(keywords, state_name, district_name):
     Find matching division within state+district
     """
     for keyword in keywords:
+        if keyword.lower().strip() in SKIP_WORDS:
+            continue
         records = get_by_state_district_division(
             state_name, district_name, keyword
         )
@@ -284,6 +302,82 @@ def find_division_from_keywords(keywords, state_name, district_name):
             return records[0].get("divisionname"), records
 
     return None, []
+
+def build_keyword_phrases(keywords):
+    """Build normalized single and adjacent-word phrases for locality matching."""
+    normalized = [
+        normalize_location_text(keyword)
+        for keyword in keywords
+        if normalize_location_text(keyword)
+    ]
+    phrases = set(normalized)
+
+    for i in range(len(normalized) - 1):
+        phrases.add(normalized[i] + normalized[i + 1])
+
+    for i in range(len(normalized) - 2):
+        phrases.add(normalized[i] + normalized[i + 1] + normalized[i + 2])
+
+    return phrases
+
+def score_suggestion_record(record, address_keywords):
+    """Rank suggestion candidates by how specifically they match the address."""
+    phrases = build_keyword_phrases(address_keywords)
+    office = normalize_location_text(record.get("officename", ""))
+    district = normalize_location_text(record.get("district", ""))
+    division = normalize_location_text(record.get("divisionname", ""))
+    region = normalize_location_text(record.get("regionname", ""))
+    state = normalize_location_text(record.get("statename", ""))
+    circle = normalize_location_text(record.get("circlename", ""))
+    score = 0
+
+    for phrase in phrases:
+        if not phrase:
+            continue
+
+        is_admin_phrase = phrase in {district, state, circle}
+
+        if office and phrase == office:
+            score += 150
+        elif office and not is_admin_phrase and (phrase in office or office in phrase):
+            score += 100 + min(len(phrase), 25)
+
+        if district and phrase == district:
+            score += 50
+        elif district and phrase in district:
+            score += 30
+
+        if division and phrase in division:
+            score += 20
+        if region and phrase in region:
+            score += 12
+        if state and phrase == state:
+            score += 5
+        if circle and phrase in circle:
+            score += 3
+
+    if str(record.get("delivery", "")).lower() == "delivery":
+        score += 2
+
+    return score
+
+def best_suggestion_record(records, address_keywords):
+    if not records:
+        return None
+    return max(
+        records,
+        key=lambda record: score_suggestion_record(record, address_keywords)
+    )
+
+def order_post_offices_by_keywords(post_offices, address_keywords):
+    if not address_keywords:
+        return post_offices
+
+    return sorted(
+        post_offices,
+        key=lambda office: score_suggestion_record(office, address_keywords),
+        reverse=True
+    )
 
 def suggest_correct_pin(address_keywords, full_text=""):
     """
@@ -301,9 +395,22 @@ def suggest_correct_pin(address_keywords, full_text=""):
     if not state_name:
         # Fallback: try direct district search
         for keyword in address_keywords:
+            if keyword.lower().strip() in SKIP_WORDS:
+                continue
             records = get_by_district(keyword)
+            records = [
+                record for record in records
+                if fuzzy_match(
+                    normalize_location_text(keyword),
+                    normalize_location_text(record.get("district", "")),
+                    threshold=0.9
+                )
+            ]
             if records:
-                return build_suggestion(records[0])
+                return build_suggestion(
+                    best_suggestion_record(records, address_keywords),
+                    address_keywords
+                )
         return None
 
     # ── Level 2: Find District within State ──
@@ -313,7 +420,10 @@ def suggest_correct_pin(address_keywords, full_text=""):
 
     if not district_name:
         # Return state-level suggestion
-        return build_suggestion(state_records[0])
+        return build_suggestion(
+            best_suggestion_record(state_records, address_keywords),
+            address_keywords
+        )
 
     # ── Level 3: Find Division within State+District ──
     division_name, division_records = find_division_from_keywords(
@@ -321,17 +431,31 @@ def suggest_correct_pin(address_keywords, full_text=""):
     )
 
     if division_records:
-        return build_suggestion(division_records[0])
+        return build_suggestion(
+            best_suggestion_record(division_records, address_keywords),
+            address_keywords
+        )
 
     # Return district-level suggestion
-    return build_suggestion(district_records[0])
+    return build_suggestion(
+        best_suggestion_record(district_records, address_keywords),
+        address_keywords
+    )
 
-def build_suggestion(record):
+def build_suggestion(record, address_keywords=None):
     """Build suggestion response from a record"""
     suggested_pin = record.get("pincode")
     post_offices = get_post_offices_by_pincode(suggested_pin) if suggested_pin else []
+    post_offices = order_post_offices_by_keywords(post_offices, address_keywords)
+    suggested_office = record.get("officename")
+    if suggested_office:
+        post_offices = sorted(
+            post_offices,
+            key=lambda office: office.get("officename") != suggested_office
+        )
     return {
         "suggested_pin": suggested_pin,
+        "suggested_office": suggested_office,
         "district": record.get("district"),
         "state": record.get("statename"),
         "circle": record.get("circlename"),
@@ -341,6 +465,62 @@ def build_suggestion(record):
         "longitude": record.get("longitude"),
         "post_offices": post_offices[:10]
     }
+
+def keyword_in_field(keyword, field):
+    """Exact or fuzzy match for a keyword against a postal field."""
+    kw = keyword.lower().strip()
+    value = field.lower().strip()
+    if not kw or not value:
+        return False
+    return kw in value or fuzzy_match(kw, value)
+
+def keyword_exists_in_location(keyword):
+    """Return True when a keyword is a known district/state/circle anywhere."""
+    return bool(
+        get_by_district(keyword) or
+        get_by_state(keyword) or
+        get_by_circle(keyword)
+    )
+
+def records_match_address(records, address_keywords):
+    """Match PIN records against address keywords with stricter evidence.
+
+    A state/circle match alone is not enough. At least one locality-level
+    field must match: district, post office, division, or region. If the
+    address contains a known location keyword that does not match this PIN's
+    records, treat it as a mismatch.
+    """
+    strong_match = False
+
+    for keyword in address_keywords:
+        kw = keyword.lower()
+        matched_any_location = False
+
+        for record in records:
+            district = record.get("district", "")
+            state = record.get("statename", "")
+            circle = record.get("circlename", "")
+            office = record.get("officename", "")
+            division = record.get("divisionname", "")
+            region = record.get("regionname", "")
+
+            if (
+                keyword_in_field(kw, district) or
+                keyword_in_field(kw, office) or
+                keyword_in_field(kw, division) or
+                keyword_in_field(kw, region)
+            ):
+                strong_match = True
+                matched_any_location = True
+                break
+
+            if keyword_in_field(kw, state) or keyword_in_field(kw, circle):
+                matched_any_location = True
+
+        if keyword_exists_in_location(kw) and not matched_any_location:
+            return False
+
+    return strong_match
 
 def validate_pin(pincode, address_keywords, full_text=""):
     """
@@ -360,30 +540,7 @@ def validate_pin(pincode, address_keywords, full_text=""):
         }
 
     # ── Step 2: Match address keywords ──
-    matched = False
-    for record in records:
-        district = record.get("district", "").lower()
-        state = record.get("statename", "").lower()
-        circle = record.get("circlename", "").lower()
-        office = record.get("officename", "").lower()
-        division = record.get("divisionname", "").lower()
-        region = record.get("regionname", "").lower()
-
-        for keyword in address_keywords:
-            kw = keyword.lower()
-            # Exact match
-            if (kw in district or kw in state or
-                    kw in office or kw in circle or
-                    kw in division or kw in region):
-                matched = True
-                break
-            # Fuzzy match for OCR errors
-            if (fuzzy_match(kw, district) or
-                    fuzzy_match(kw, state)):
-                matched = True
-                break
-        if matched:
-            break
+    matched = records_match_address(records, address_keywords)
 
     # ── Step 3: ML Validation ──
     ml_result = {"ml_valid": None, "message": "ML skipped"}

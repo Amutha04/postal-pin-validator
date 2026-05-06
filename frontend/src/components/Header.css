@@ -67,6 +67,7 @@
 .header-right {
   display: flex;
   align-items: center;
+  gap: 12px;
 }
 
 .header-badge {
@@ -79,8 +80,45 @@
   border-radius: 4px;
 }
 
+.user-menu {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.user-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: #44403c;
+}
+
+.header-action {
+  border: 1.5px solid #d6d3d1;
+  border-radius: 8px;
+  background: #fff;
+  color: #44403c;
+  font-size: 13px;
+  font-weight: 700;
+  font-family: inherit;
+  padding: 7px 14px;
+  cursor: pointer;
+}
+
+.header-action:hover {
+  background: #fafaf9;
+  border-color: #a8a29e;
+}
+
 @media (max-width: 640px) {
   .header-badge {
+    display: none;
+  }
+
+  .header-inner {
+    padding: 0;
+  }
+
+  .user-name {
     display: none;
   }
 }
