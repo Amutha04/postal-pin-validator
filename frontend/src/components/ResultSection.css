@@ -10,83 +10,92 @@
   to { opacity: 1; transform: translateY(0); }
 }
 
-/* ---- Postmark Status Card ---- */
-.postmark-card {
+/* ---- FIX 5: New Status Banner (replaces circle stamp) ---- */
+.status-banner {
   display: flex;
-  align-items: center;
-  gap: 28px;
-  padding: 28px 32px;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 20px 24px;
   border-radius: 12px;
-  border: 2px solid;
+  border: 1.5px solid;
 }
 
-.postmark-card.valid {
+.status-banner.status-valid {
   background: #f0fdf4;
   border-color: #bbf7d0;
 }
 
-.postmark-card.invalid {
+.status-banner.status-invalid {
   background: #fef2f2;
   border-color: #fecaca;
 }
 
-/* Circular postmark stamp */
-.stamp {
+.status-icon-wrap {
   flex-shrink: 0;
-  width: 80px;
-  height: 80px;
-  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
-.stamp-valid {
-  border: 3px solid #22c55e;
+.status-valid .status-icon-wrap {
+  background: #dcfce7;
+  color: #16a34a;
 }
 
-.stamp-invalid {
-  border: 3px solid #ef4444;
+.status-invalid .status-icon-wrap {
+  background: #fee2e2;
+  color: #dc2626;
 }
 
-.stamp-ring {
+.status-content {
+  flex: 1;
+}
+
+.status-top {
   display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: 2px;
+  gap: 12px;
+  margin-bottom: 6px;
+  flex-wrap: wrap;
 }
 
-.stamp-text {
-  font-size: 9px;
+.status-badge {
+  font-size: 10px;
   font-weight: 800;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  padding: 3px 10px;
+  border-radius: 4px;
 }
 
-.stamp-valid .stamp-text { color: #16a34a; }
-.stamp-invalid .stamp-text { color: #dc2626; }
+.badge-valid {
+  background: #dcfce7;
+  color: #15803d;
+}
 
-.stamp-pin {
+.badge-invalid {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.status-pin {
   font-family: 'Space Mono', monospace;
-  font-size: 18px;
+  font-size: 20px;
   font-weight: 700;
-  letter-spacing: 2px;
-}
-
-.stamp-valid .stamp-pin { color: #15803d; }
-.stamp-invalid .stamp-pin { color: #b91c1c; }
-
-.postmark-title {
-  font-size: 18px;
-  font-weight: 700;
+  letter-spacing: 3px;
   color: #1c1917;
-  margin-bottom: 4px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 
-.postmark-msg {
-  font-size: 14px;
+.status-message {
+  font-size: 13px;
   color: #57534e;
   line-height: 1.5;
+  margin: 0;
 }
 
 /* ---- Card ---- */
@@ -102,11 +111,6 @@
   align-items: center;
   gap: 8px;
   margin-bottom: 16px;
-}
-
-.card-header.clickable {
-  cursor: pointer;
-  margin-bottom: 0;
 }
 
 .card-icon {
@@ -135,17 +139,9 @@
   border-radius: 10px;
 }
 
-/* Chevron for collapsible */
-.chevron {
-  transition: transform 0.2s;
-}
-.chevron.open {
-  transform: rotate(180deg);
-}
-
-/* ---- Map ---- */
+/* ---- FIX 4: Map — add margin-bottom to separate from post offices ---- */
 .card-map {
-  padding-bottom: 0;
+  padding-bottom: 20px;
 }
 
 .map-link {
@@ -159,14 +155,12 @@
   transition: opacity 0.15s;
 }
 
-.map-link:hover {
-  opacity: 0.7;
-}
+.map-link:hover { opacity: 0.7; }
 
 .map-container {
   height: 340px;
-  border-radius: 0 0 10px 10px;
-  margin: 0 -24px -20px;
+  border-radius: 8px;
+  margin: 16px 0 0;
   overflow: hidden;
 }
 
@@ -175,7 +169,6 @@
   border: none;
 }
 
-/* Fix leaflet z-index */
 .leaflet-pane { z-index: 1; }
 .leaflet-control { z-index: 2; }
 
@@ -217,9 +210,7 @@
   transition: color 0.15s;
 }
 
-.copy-btn-inline:hover {
-  color: #dc2626;
-}
+.copy-btn-inline:hover { color: #dc2626; }
 
 /* ---- Detail Rows ---- */
 .detail-rows {
@@ -236,9 +227,7 @@
 
 .detail-row:last-child { border-bottom: none; }
 
-.detail-row.compact {
-  padding: 6px 0;
-}
+.detail-row.compact { padding: 6px 0; }
 
 .detail-key {
   width: 100px;
@@ -248,9 +237,7 @@
   font-size: 13px;
 }
 
-.detail-val {
-  color: #1c1917;
-}
+.detail-val { color: #1c1917; }
 
 .mono {
   font-family: 'Space Mono', monospace;
@@ -309,9 +296,7 @@
   transition: background 0.1s;
 }
 
-.office-item:hover {
-  background: #f5f5f4;
-}
+.office-item:hover { background: #f5f5f4; }
 
 .office-name {
   font-size: 13px;
@@ -328,20 +313,9 @@
   letter-spacing: 0.02em;
 }
 
-.badge-green {
-  background: #dcfce7;
-  color: #15803d;
-}
-
-.badge-red {
-  background: #fee2e2;
-  color: #b91c1c;
-}
-
-.badge-gray {
-  background: #f5f5f4;
-  color: #78716c;
-}
+.badge-green { background: #dcfce7; color: #15803d; }
+.badge-red { background: #fee2e2; color: #b91c1c; }
+.badge-gray { background: #f5f5f4; color: #78716c; }
 
 /* ---- Suggestion ---- */
 .card-suggestion {
@@ -376,23 +350,7 @@
   letter-spacing: 3px;
 }
 
-.suggestion-details {
-  flex: 1;
-}
-
-/* ---- ML ---- */
-.ml-text {
-  font-size: 14px;
-  color: #57534e;
-  line-height: 1.5;
-}
-
-.ml-hint {
-  font-size: 13px;
-  color: #ea580c;
-  font-weight: 600;
-  margin-top: 6px;
-}
+.suggestion-details { flex: 1; }
 
 /* ---- OCR ---- */
 .ocr-text {
@@ -413,11 +371,10 @@
 
 /* ---- Responsive ---- */
 @media (max-width: 640px) {
-  .postmark-card {
+  .status-banner {
     flex-direction: column;
-    gap: 16px;
-    text-align: center;
-    padding: 24px 20px;
+    gap: 12px;
+    padding: 16px 20px;
   }
 
   .info-grid {

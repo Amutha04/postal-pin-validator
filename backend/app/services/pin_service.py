@@ -328,13 +328,18 @@ def suggest_correct_pin(address_keywords, full_text=""):
 
 def build_suggestion(record):
     """Build suggestion response from a record"""
+    suggested_pin = record.get("pincode")
+    post_offices = get_post_offices_by_pincode(suggested_pin) if suggested_pin else []
     return {
-        "suggested_pin": record.get("pincode"),
+        "suggested_pin": suggested_pin,
         "district": record.get("district"),
         "state": record.get("statename"),
         "circle": record.get("circlename"),
         "division": record.get("divisionname"),
-        "region": record.get("regionname")
+        "region": record.get("regionname"),
+        "latitude": record.get("latitude"),
+        "longitude": record.get("longitude"),
+        "post_offices": post_offices[:10]
     }
 
 def validate_pin(pincode, address_keywords, full_text=""):

@@ -2,21 +2,29 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import './UploadSection.css';
 import axios from 'axios';
 import { toast } from 'react-toastify';
+import BulkResults from './BulkResults';
+import ResultSection from './ResultSection';
+import API_BASE_URL from '../apiConfig';
 
-function UploadSection({ setResult, setLoading, loading, setBulkResults }) {
-  const [mode, setMode] = useState('scan'); // 'scan', 'lookup', 'bulk', 'live'
+function UploadSection() {
+  const [mode, setMode] = useState('scan');
+  const [loading, setLoading] = useState(false);
+  const [scanResult, setScanResult] = useState(null);
+  const [lookupResult, setLookupResult] = useState(null);
   const [image, setImage] = useState(null);
   const [preview, setPreview] = useState(null);
   const [dragActive, setDragActive] = useState(false);
   const [pinInput, setPinInput] = useState('');
   const [bulkFiles, setBulkFiles] = useState([]);
+  const [bulkResults, setBulkResults] = useState([]);
   const [bulkProgress, setBulkProgress] = useState({ current: 0, total: 0, running: false });
 
   // Live scanner state
   const [cameraActive, setCameraActive] = useState(false);
   const [liveProcessing, setLiveProcessing] = useState(false);
-  const [liveOverlay, setLiveOverlay] = useState(null); // 'valid', 'invalid', 'error'
+  const [liveOverlay, setLiveOverlay] = useState(null);
   const [liveCount, setLiveCount] = useState(0);
+  const [liveResults, setLiveResults] = useState([]);
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const streamRef = useRef(null);
@@ -31,7 +39,7 @@ function UploadSection({ setResult, setLoading, loading, setBulkResults }) {
     if (file && file.type.startsWith('image/')) {
       setImage(file);
       setPreview(URL.createObjectURL(file));
-      setResult(null);
+      setScanResult(null);
     }
   };
 
@@ -42,11 +50,11 @@ function UploadSection({ setResult, setLoading, loading, setBulkResults }) {
     try {
       setLoading(true);
       const response = await axios.post(
-        'http://127.0.0.1:5000/api/validate',
+        `${API_BASE_URL}/api/validate`,
         formData,
         { headers: { 'Content-Type': 'multipart/form-data' } }
       );
-      setResult(response.data);
+      setScanResult(response.data);
       toast.success('Validation complete');
     } catch (error) {
       const msg = error.response?.data?.error || 'Something went wrong';
@@ -56,6 +64,7 @@ function UploadSection({ setResult, setLoading, loading, setBulkResults }) {
     }
   };
 
+  // FIX 6: Clear pinInput after successful lookup so placeholder reappears
   const handleLookup = async () => {
     const pin = pinInput.trim();
     if (pin.length !== 6 || !/^\d{6}$/.test(pin)) {
@@ -64,27 +73,32 @@ function UploadSection({ setResult, setLoading, loading, setBulkResults }) {
     }
     try {
       setLoading(true);
-      setResult(null);
       const response = await axios.post(
-        'http://127.0.0.1:5000/api/lookup',
+        `${API_BASE_URL}/api/lookup`,
         { pincode: pin },
         { headers: { 'Content-Type': 'application/json' } }
       );
-      setResult(response.data);
-      if (response.data.valid) toast.success('PIN code found');
-      else toast.error('PIN code not found');
+      setLookupResult(response.data);
+      if (response.data.valid) {
+        toast.success('PIN code found');
+        setPinInput(''); // FIX 6: clear input so placeholder reappears
+      } else {
+        toast.error('PIN code not found');
+        setPinInput(''); // FIX 6: clear on not found too
+      }
     } catch (error) {
       const msg = error.response?.data?.error || 'Something went wrong';
       toast.error(msg);
     } finally {
       setLoading(false);
+      setPinInput('');
     }
   };
 
   const handleClear = () => {
     setImage(null);
     setPreview(null);
-    setResult(null);
+    setScanResult(null);
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
@@ -93,19 +107,28 @@ function UploadSection({ setResult, setLoading, loading, setBulkResults }) {
   };
 
   // ---- Bulk handlers ----
+  // FIX 3: handleBulkFiles for NEW files (replaces all)
   const handleBulkFiles = (files) => {
     const images = Array.from(files).filter(f => f.type.startsWith('image/'));
     if (images.length === 0) { toast.error('No valid image files selected'); return; }
     setBulkFiles(images);
-    setBulkResults([]);
+    setBulkResults([]); // reset results only when starting fresh
     setBulkProgress({ current: 0, total: 0, running: false });
   };
 
+  // FIX 3: handleAddMore — appends files, keeps existing results
+  const handleAddMore = (files) => {
+    const images = Array.from(files).filter(f => f.type.startsWith('image/'));
+    if (images.length === 0) { toast.error('No valid image files selected'); return; }
+    setBulkFiles(images); // new batch to validate
+    // DO NOT reset bulkResults — keep previous results intact
+    setBulkProgress({ current: 0, total: 0, running: false });
+  };
+
+  // FIX 3: Validate appends to existing results instead of replacing
   const handleBulkValidate = async () => {
     if (bulkFiles.length === 0) return;
-    setBulkResults([]);
     setBulkProgress({ current: 0, total: bulkFiles.length, running: true });
-    const results = [];
     for (let i = 0; i < bulkFiles.length; i++) {
       const file = bulkFiles[i];
       const formData = new FormData();
@@ -113,30 +136,34 @@ function UploadSection({ setResult, setLoading, loading, setBulkResults }) {
       setBulkProgress(prev => ({ ...prev, current: i + 1 }));
       try {
         const response = await axios.post(
-          'http://127.0.0.1:5000/api/validate', formData,
+          `${API_BASE_URL}/api/validate`, formData,
           { headers: { 'Content-Type': 'multipart/form-data' } }
         );
-        results.push({
+        const data = response.data;
+        const recipient = data.groq_data?.recipient;
+        const resultRow = {
           filename: file.name,
-          status: response.data.valid ? 'Valid' : 'Mismatch',
-          pincode: response.data.pincode || response.data.extracted_pin || '-',
-          district: response.data.district || response.data.actual_location?.district || '-',
-          state: response.data.state || response.data.actual_location?.state || '-',
-          suggestion: response.data.suggestion?.suggested_pin || '-',
-          message: response.data.message || '',
-          ocr_engine: response.data.ocr_engine || '-',
-        });
+          status: data.valid ? 'Valid' : 'Mismatch',
+          pincode: data.pincode || data.extracted_pin || '-',
+          district: data.district || recipient?.district || data.suggestion?.district || data.actual_location?.district || '-',
+          state: data.state || recipient?.state || data.suggestion?.state || data.actual_location?.state || '-',
+          suggestion: data.suggestion?.suggested_pin || '-',
+          message: data.message || '',
+          ocr_engine: data.ocr_engine || '-',
+        };
+        setBulkResults(prev => [...prev, resultRow]);
       } catch (error) {
-        results.push({
+        setBulkResults(prev => [...prev, {
           filename: file.name, status: 'Error', pincode: '-',
           district: '-', state: '-', suggestion: '-',
           message: error.response?.data?.error || 'Failed', ocr_engine: '-',
-        });
+        }]);
       }
-      setBulkResults([...results]);
     }
+    const processedCount = bulkFiles.length;
+    setBulkFiles([]);
     setBulkProgress(prev => ({ ...prev, running: false }));
-    toast.success(`Bulk validation complete: ${results.length} images processed`);
+    toast.success(`Bulk validation complete: ${processedCount} images processed`);
   };
 
   const handleBulkClear = () => {
@@ -155,13 +182,12 @@ function UploadSection({ setResult, setLoading, loading, setBulkResults }) {
       streamRef.current = stream;
       setCameraActive(true);
       setLiveCount(0);
-      setBulkResults([]);
+      setLiveResults([]);
     } catch (err) {
       toast.error('Could not access camera. Check permissions.');
     }
   };
 
-  // Attach stream to video element once it mounts
   useEffect(() => {
     if (cameraActive && videoRef.current && streamRef.current) {
       videoRef.current.srcObject = streamRef.current;
@@ -180,37 +206,32 @@ function UploadSection({ setResult, setLoading, loading, setBulkResults }) {
 
   const captureAndValidate = useCallback(async () => {
     if (liveProcessing || !videoRef.current || !canvasRef.current) return;
-
     const video = videoRef.current;
     const canvas = canvasRef.current;
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
     const ctx = canvas.getContext('2d');
     ctx.drawImage(video, 0, 0);
-
     canvas.toBlob(async (blob) => {
       if (!blob) return;
       setLiveProcessing(true);
       setLiveOverlay(null);
-
       const formData = new FormData();
       formData.append('image', blob, `capture-${Date.now()}.jpg`);
-
       try {
         const response = await axios.post(
-          'http://127.0.0.1:5000/api/validate', formData,
+          `${API_BASE_URL}/api/validate`, formData,
           { headers: { 'Content-Type': 'multipart/form-data' } }
         );
         const data = response.data;
-        const status = data.valid ? 'Valid' : 'Mismatch';
+        const recipient = data.groq_data?.recipient;
         setLiveOverlay(data.valid ? 'valid' : 'invalid');
-
-        setBulkResults(prev => [...prev, {
+        setLiveResults(prev => [...prev, {
           filename: `Capture #${prev.length + 1}`,
-          status,
+          status: data.valid ? 'Valid' : 'Mismatch',
           pincode: data.pincode || data.extracted_pin || '-',
-          district: data.district || data.actual_location?.district || '-',
-          state: data.state || data.actual_location?.state || '-',
+          district: data.district || recipient?.district || data.suggestion?.district || data.actual_location?.district || '-',
+          state: data.state || recipient?.state || data.suggestion?.state || data.actual_location?.state || '-',
           suggestion: data.suggestion?.suggested_pin || '-',
           message: data.message || '',
           ocr_engine: data.ocr_engine || '-',
@@ -218,11 +239,15 @@ function UploadSection({ setResult, setLoading, loading, setBulkResults }) {
         setLiveCount(prev => prev + 1);
       } catch (error) {
         setLiveOverlay('error');
-        const msg = error.response?.data?.error || 'Failed';
-        setBulkResults(prev => [...prev, {
+        setLiveResults(prev => [...prev, {
           filename: `Capture #${prev.length + 1}`,
-          status: 'Error', pincode: '-', district: '-', state: '-',
-          suggestion: '-', message: msg, ocr_engine: '-',
+          status: 'Error',
+          pincode: '-',
+          district: '-',
+          state: '-',
+          suggestion: '-',
+          message: error.response?.data?.error || 'Failed',
+          ocr_engine: '-',
         }]);
         setLiveCount(prev => prev + 1);
       } finally {
@@ -230,9 +255,8 @@ function UploadSection({ setResult, setLoading, loading, setBulkResults }) {
         setTimeout(() => setLiveOverlay(null), 1500);
       }
     }, 'image/jpeg', 0.9);
-  }, [liveProcessing, setBulkResults]);
+  }, [liveProcessing]);
 
-  // Spacebar to capture
   useEffect(() => {
     if (mode !== 'live' || !cameraActive) return;
     const handler = (e) => {
@@ -245,7 +269,6 @@ function UploadSection({ setResult, setLoading, loading, setBulkResults }) {
     return () => window.removeEventListener('keydown', handler);
   }, [mode, cameraActive, liveProcessing, captureAndValidate]);
 
-  // Stop camera when leaving live mode
   useEffect(() => {
     if (mode !== 'live') stopCamera();
   }, [mode, stopCamera]);
@@ -264,7 +287,7 @@ function UploadSection({ setResult, setLoading, loading, setBulkResults }) {
       {/* Mode toggle */}
       <div className="mode-toggle">
         <button className={`mode-btn ${mode === 'scan' ? 'active' : ''}`}
-          onClick={() => { setMode('scan'); setResult(null); }}>
+          onClick={() => setMode('scan')}>
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
             <rect x="1" y="3" width="14" height="10" rx="2" stroke="currentColor" strokeWidth="1.5" fill="none"/>
             <circle cx="8" cy="8" r="2.5" stroke="currentColor" strokeWidth="1.5" fill="none"/>
@@ -272,7 +295,7 @@ function UploadSection({ setResult, setLoading, loading, setBulkResults }) {
           Scan
         </button>
         <button className={`mode-btn ${mode === 'lookup' ? 'active' : ''}`}
-          onClick={() => { setMode('lookup'); setResult(null); }}>
+          onClick={() => setMode('lookup')}>
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
             <circle cx="7" cy="7" r="4.5" stroke="currentColor" strokeWidth="1.5" fill="none"/>
             <path d="M10.5 10.5L14 14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
@@ -280,7 +303,7 @@ function UploadSection({ setResult, setLoading, loading, setBulkResults }) {
           Lookup
         </button>
         <button className={`mode-btn ${mode === 'bulk' ? 'active' : ''}`}
-          onClick={() => { setMode('bulk'); setResult(null); }}>
+          onClick={() => setMode('bulk')}>
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
             <rect x="2" y="1" width="12" height="4" rx="1" stroke="currentColor" strokeWidth="1.3" fill="none"/>
             <rect x="2" y="6" width="12" height="4" rx="1" stroke="currentColor" strokeWidth="1.3" fill="none"/>
@@ -289,7 +312,7 @@ function UploadSection({ setResult, setLoading, loading, setBulkResults }) {
           Bulk
         </button>
         <button className={`mode-btn ${mode === 'live' ? 'active' : ''}`}
-          onClick={() => { setMode('live'); setResult(null); }}>
+          onClick={() => setMode('live')}>
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
             <circle cx="8" cy="8" r="3" fill="currentColor"/>
             <circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeWidth="1.5" fill="none"/>
@@ -334,7 +357,7 @@ function UploadSection({ setResult, setLoading, loading, setBulkResults }) {
                     </svg>
                   </div>
                   <p className="drop-text">Drop your envelope image here</p>
-                  <p className="drop-hint">or click to browse &mdash; JPG, PNG supported</p>
+                  <p className="drop-hint">or click to browse — JPG, PNG supported</p>
                 </div>
               )}
             </div>
@@ -354,11 +377,6 @@ function UploadSection({ setResult, setLoading, loading, setBulkResults }) {
             </button>
             {isMobile && (
               <button className="btn-ghost" onClick={() => cameraInputRef.current.click()}>
-                <svg width="15" height="15" viewBox="0 0 16 16" fill="none" style={{ marginRight: 6 }}>
-                  <rect x="1" y="4" width="14" height="10" rx="2" stroke="currentColor" strokeWidth="1.5" fill="none"/>
-                  <circle cx="8" cy="9" r="2.5" stroke="currentColor" strokeWidth="1.5" fill="none"/>
-                  <path d="M5 4L6 2h4l1 2" stroke="currentColor" strokeWidth="1.5" fill="none"/>
-                </svg>
                 Camera
               </button>
             )}
@@ -370,6 +388,7 @@ function UploadSection({ setResult, setLoading, loading, setBulkResults }) {
               </button>
             )}
           </div>
+          {scanResult && <ResultSection result={scanResult} />}
         </>
       )}
 
@@ -377,9 +396,16 @@ function UploadSection({ setResult, setLoading, loading, setBulkResults }) {
       {mode === 'lookup' && (
         <div className="lookup-section">
           <div className="lookup-input-wrap">
-            <input type="text" className="lookup-input" placeholder="Enter 6-digit PIN code"
-              value={pinInput} onChange={(e) => setPinInput(e.target.value.replace(/\D/g, '').slice(0, 6))}
-              onKeyDown={handlePinKeyDown} maxLength={6} autoFocus />
+            <input
+              type="text"
+              className="lookup-input"
+              placeholder="Enter 6-digit PIN code"
+              value={pinInput}
+              onChange={(e) => setPinInput(e.target.value.replace(/\D/g, '').slice(0, 6))}
+              onKeyDown={handlePinKeyDown}
+              maxLength={6}
+              autoFocus
+            />
             <button className="btn-primary lookup-btn" onClick={handleLookup}
               disabled={loading || pinInput.length !== 6}>
               {loading ? (
@@ -388,10 +414,12 @@ function UploadSection({ setResult, setLoading, loading, setBulkResults }) {
             </button>
           </div>
           <p className="lookup-hint">Type a PIN and press Enter or click Lookup</p>
+          {lookupResult && <ResultSection result={lookupResult} />}
         </div>
       )}
 
       {/* ---- BULK MODE ---- */}
+      {/* FIX 2: BulkResults rendered INSIDE bulk mode section only */}
       {mode === 'bulk' && (
         <div className="bulk-section">
           <div className={`envelope ${dragActive ? 'drag-over' : ''}`}
@@ -422,7 +450,7 @@ function UploadSection({ setResult, setLoading, loading, setBulkResults }) {
                       </svg>
                     </div>
                     <p className="drop-text">Drop multiple envelope images</p>
-                    <p className="drop-hint">or click to browse &mdash; select multiple files</p>
+                    <p className="drop-hint">or click to browse — select multiple files</p>
                   </>
                 )}
               </div>
@@ -433,8 +461,14 @@ function UploadSection({ setResult, setLoading, loading, setBulkResults }) {
               ))}
             </div>
           </div>
+
+          {/* FIX 3: separate file input for "Add More" */}
           <input type="file" accept="image/*" multiple ref={bulkInputRef}
             onChange={(e) => handleBulkFiles(e.target.files)} style={{ display: 'none' }} />
+          <input type="file" accept="image/*" multiple
+            id="bulk-add-more-input"
+            onChange={(e) => handleAddMore(e.target.files)} style={{ display: 'none' }} />
+
           {bulkProgress.running && (
             <div className="bulk-progress">
               <div className="progress-bar">
@@ -444,11 +478,20 @@ function UploadSection({ setResult, setLoading, loading, setBulkResults }) {
             </div>
           )}
           <div className="actions">
-            {bulkFiles.length > 0 && (
+            {(bulkFiles.length > 0 || bulkResults?.length > 0) && (
               <button className="btn-ghost" onClick={handleBulkClear} disabled={bulkProgress.running}>Clear All</button>
             )}
-            <button className="btn-ghost" onClick={() => bulkInputRef.current.click()} disabled={bulkProgress.running}>
-              {bulkFiles.length > 0 ? 'Add More' : 'Browse Files'}
+            {/* FIX 3: Add More uses separate handler that preserves results */}
+            <button className="btn-ghost"
+              onClick={() => {
+                if (bulkResults?.length > 0) {
+                  document.getElementById('bulk-add-more-input').click();
+                } else {
+                  bulkInputRef.current.click();
+                }
+              }}
+              disabled={bulkProgress.running}>
+              {bulkFiles.length > 0 || bulkResults?.length > 0 ? 'Add More' : 'Browse Files'}
             </button>
             {bulkFiles.length > 0 && (
               <button className="btn-primary" onClick={handleBulkValidate} disabled={bulkProgress.running}>
@@ -458,6 +501,11 @@ function UploadSection({ setResult, setLoading, loading, setBulkResults }) {
               </button>
             )}
           </div>
+
+          {/* FIX 2: BulkResults ONLY shown inside bulk mode */}
+          {bulkResults && bulkResults.length > 0 && (
+            <BulkResults results={bulkResults} />
+          )}
         </div>
       )}
 
@@ -465,13 +513,11 @@ function UploadSection({ setResult, setLoading, loading, setBulkResults }) {
       {mode === 'live' && (
         <div className="live-section">
           <div className="live-feed-wrap">
-            {/* Airmail stripe top */}
             <div className="airmail-stripe top-stripe">
               {[...Array(20)].map((_, i) => (
                 <div key={i} className={`stripe-block ${i % 2 === 0 ? 'red' : 'blue'}`} />
               ))}
             </div>
-
             <div className="live-feed-container">
               {!cameraActive ? (
                 <div className="live-placeholder" onClick={startCamera}>
@@ -490,24 +536,18 @@ function UploadSection({ setResult, setLoading, loading, setBulkResults }) {
               ) : (
                 <div className="live-video-wrap">
                   <video ref={videoRef} autoPlay playsInline muted className="live-video" />
-
-                  {/* Scanner corner guides */}
                   <div className="scan-corners">
                     <div className="corner tl"></div>
                     <div className="corner tr"></div>
                     <div className="corner bl"></div>
                     <div className="corner br"></div>
                   </div>
-
-                  {/* Processing overlay */}
                   {liveProcessing && (
                     <div className="live-overlay processing">
                       <div className="live-spinner"></div>
                       <span>Analyzing...</span>
                     </div>
                   )}
-
-                  {/* Result overlay */}
                   {liveOverlay === 'valid' && (
                     <div className="live-overlay result-valid">
                       <svg width="64" height="64" viewBox="0 0 64 64" fill="none">
@@ -532,13 +572,7 @@ function UploadSection({ setResult, setLoading, loading, setBulkResults }) {
                       </svg>
                     </div>
                   )}
-
-                  {/* Live counter */}
-                  {liveCount > 0 && (
-                    <div className="live-counter">{liveCount} scanned</div>
-                  )}
-
-                  {/* REC indicator */}
+                  {liveCount > 0 && <div className="live-counter">{liveCount} scanned</div>}
                   <div className="rec-indicator">
                     <span className="rec-dot"></span>
                     LIVE
@@ -546,43 +580,30 @@ function UploadSection({ setResult, setLoading, loading, setBulkResults }) {
                 </div>
               )}
             </div>
-
-            {/* Airmail stripe bottom */}
             <div className="airmail-stripe bottom-stripe">
               {[...Array(20)].map((_, i) => (
                 <div key={i} className={`stripe-block ${i % 2 === 0 ? 'blue' : 'red'}`} />
               ))}
             </div>
           </div>
-
-          {/* Hidden canvas for capture */}
           <canvas ref={canvasRef} style={{ display: 'none' }} />
-
           <div className="actions">
             {!cameraActive ? (
               <button className="btn-primary" onClick={startCamera}>
-                <svg width="15" height="15" viewBox="0 0 16 16" fill="none" style={{ marginRight: 6 }}>
-                  <rect x="1" y="4" width="14" height="10" rx="2" stroke="currentColor" strokeWidth="1.5" fill="none"/>
-                  <circle cx="8" cy="9" r="2.5" stroke="currentColor" strokeWidth="1.5" fill="none"/>
-                  <path d="M5 4L6 2h4l1 2" stroke="currentColor" strokeWidth="1.5" fill="none"/>
-                </svg>
                 Start Camera
               </button>
             ) : (
               <>
                 <button className="btn-capture" onClick={captureAndValidate} disabled={liveProcessing}>
-                  <div className="capture-ring">
-                    <div className="capture-dot"></div>
-                  </div>
+                  <div className="capture-ring"><div className="capture-dot"></div></div>
                   Capture
                 </button>
                 <span className="spacebar-hint">or press Spacebar</span>
-                <button className="btn-ghost" onClick={stopCamera} style={{ marginLeft: 'auto' }}>
-                  Stop Camera
-                </button>
+                <button className="btn-ghost" onClick={stopCamera} style={{ marginLeft: 'auto' }}>Stop Camera</button>
               </>
             )}
           </div>
+          {liveResults.length > 0 && <BulkResults results={liveResults} />}
         </div>
       )}
     </div>

@@ -5,30 +5,38 @@ import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import L from 'leaflet';
 import axios from 'axios';
 import 'leaflet/dist/leaflet.css';
+import API_BASE_URL from '../apiConfig';
 
 function ResultSection({ result }) {
   const isValid = result.valid;
-  const [showOcr, setShowOcr] = useState(false);
   const [nearbyPins, setNearbyPins] = useState([]);
   const recipient = result.groq_data?.recipient;
+  const suggestion = result.suggestion;
+  const displayPin = result.pincode || result.extracted_pin;
 
-  const hasCoords = result.latitude && result.longitude &&
-    result.latitude !== 'NA' && result.longitude !== 'NA' &&
-    !isNaN(parseFloat(result.latitude)) && !isNaN(parseFloat(result.longitude));
+  const postalData = isValid ? result : suggestion;
+  const postalPin = isValid ? displayPin : suggestion?.suggested_pin;
+  const postalOffices = isValid ? result.post_offices : suggestion?.post_offices;
 
-  // Fetch nearby PINs when we have coordinates
+  const hasCoords = postalData?.latitude && postalData?.longitude &&
+    postalData.latitude !== 'NA' && postalData.longitude !== 'NA' &&
+    !isNaN(parseFloat(postalData.latitude)) &&
+    !isNaN(parseFloat(postalData.longitude));
+
   useEffect(() => {
-    if (hasCoords) {
-      axios.post('http://127.0.0.1:5000/api/nearby', {
-        lat: parseFloat(result.latitude),
-        lng: parseFloat(result.longitude),
-        exclude: result.pincode,
-      }).then(res => setNearbyPins(res.data))
-        .catch(() => setNearbyPins([]));
+    if (!hasCoords) {
+      setNearbyPins([]);
+      return;
     }
-  }, [hasCoords, result.latitude, result.longitude, result.pincode]);
 
-  // Custom red marker for main PIN
+    axios.post(`${API_BASE_URL}/api/nearby`, {
+      lat: parseFloat(postalData.latitude),
+      lng: parseFloat(postalData.longitude),
+      exclude: postalPin,
+    }).then(res => setNearbyPins(res.data))
+      .catch(() => setNearbyPins([]));
+  }, [hasCoords, postalData?.latitude, postalData?.longitude, postalPin]);
+
   const mainIcon = hasCoords ? new L.DivIcon({
     className: 'map-pin-icon',
     html: `<svg width="28" height="40" viewBox="0 0 28 40" fill="none">
@@ -40,7 +48,6 @@ function ResultSection({ result }) {
     popupAnchor: [0, -40],
   }) : null;
 
-  // Smaller gray marker for nearby PINs
   const nearbyIcon = new L.DivIcon({
     className: 'map-pin-icon',
     html: `<svg width="20" height="28" viewBox="0 0 20 28" fill="none">
@@ -53,44 +60,42 @@ function ResultSection({ result }) {
   });
 
   const copyToClipboard = (text, label) => {
-    navigator.clipboard.writeText(text).then(() => {
-      toast.success(`${label} copied`);
-    });
+    navigator.clipboard.writeText(text).then(() => toast.success(`${label} copied`));
   };
 
   return (
     <div className="results">
-
-      {/* ---- Postmark Status ---- */}
-      <div className={`postmark-card ${isValid ? 'valid' : 'invalid'}`}>
-        <div className="postmark-left">
-          {/* Circular postmark stamp */}
-          <div className={`stamp ${isValid ? 'stamp-valid' : 'stamp-invalid'}`}>
-            <div className="stamp-ring">
-              <span className="stamp-text">{isValid ? 'VERIFIED' : 'MISMATCH'}</span>
-              <span className="stamp-pin">{result.pincode || result.extracted_pin}</span>
-            </div>
-          </div>
+      <div className={`status-banner ${isValid ? 'status-valid' : 'status-invalid'}`}>
+        <div className="status-icon-wrap">
+          {isValid ? (
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+              <path d="M5 12l5 5 9-9" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          ) : (
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+              <path d="M6 6l12 12M6 18L18 6" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"/>
+            </svg>
+          )}
         </div>
-        <div className="postmark-right">
-          <h2 className="postmark-title">
-            {isValid ? 'PIN Code Valid' : 'PIN Code Mismatch'}
-            <button
-              className="copy-btn"
-              onClick={() => copyToClipboard(result.pincode || result.extracted_pin, 'PIN')}
-              title="Copy PIN"
-            >
-              <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
-                <rect x="5" y="5" width="9" height="9" rx="1.5" stroke="currentColor" strokeWidth="1.5" fill="none"/>
-                <path d="M11 5V3.5A1.5 1.5 0 009.5 2h-6A1.5 1.5 0 002 3.5v6A1.5 1.5 0 003.5 11H5" stroke="currentColor" strokeWidth="1.5" fill="none"/>
-              </svg>
-            </button>
-          </h2>
-          <p className="postmark-msg">{result.message}</p>
+        <div className="status-content">
+          <div className="status-top">
+            <span className={`status-badge ${isValid ? 'badge-valid' : 'badge-invalid'}`}>
+              {isValid ? 'VERIFIED' : 'MISMATCH'}
+            </span>
+            <span className="status-pin">
+              {displayPin}
+              <button className="copy-btn-inline" onClick={() => copyToClipboard(displayPin, 'PIN')} title="Copy PIN">
+                <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
+                  <rect x="5" y="5" width="9" height="9" rx="1.5" stroke="currentColor" strokeWidth="1.5" fill="none"/>
+                  <path d="M11 5V3.5A1.5 1.5 0 009.5 2h-6A1.5 1.5 0 002 3.5v6A1.5 1.5 0 003.5 11H5" stroke="currentColor" strokeWidth="1.5" fill="none"/>
+                </svg>
+              </button>
+            </span>
+          </div>
+          <p className="status-message">{result.message}</p>
         </div>
       </div>
 
-      {/* ---- Recipient Details ---- */}
       {recipient && (
         <div className="card">
           <div className="card-header">
@@ -103,36 +108,11 @@ function ResultSection({ result }) {
             <h3 className="card-label">Recipient Details</h3>
           </div>
           <div className="detail-rows">
-            {recipient.name && (
-              <div className="detail-row">
-                <span className="detail-key">Name</span>
-                <span className="detail-val">{recipient.name}</span>
-              </div>
-            )}
-            {recipient.address && (
-              <div className="detail-row">
-                <span className="detail-key">Address</span>
-                <span className="detail-val">{recipient.address}</span>
-              </div>
-            )}
-            {recipient.city && (
-              <div className="detail-row">
-                <span className="detail-key">City</span>
-                <span className="detail-val">{recipient.city}</span>
-              </div>
-            )}
-            {recipient.district && (
-              <div className="detail-row">
-                <span className="detail-key">District</span>
-                <span className="detail-val">{recipient.district}</span>
-              </div>
-            )}
-            {recipient.state && (
-              <div className="detail-row">
-                <span className="detail-key">State</span>
-                <span className="detail-val">{recipient.state}</span>
-              </div>
-            )}
+            {recipient.name && <div className="detail-row"><span className="detail-key">Name</span><span className="detail-val">{recipient.name}</span></div>}
+            {recipient.address && <div className="detail-row"><span className="detail-key">Address</span><span className="detail-val">{recipient.address}</span></div>}
+            {recipient.city && <div className="detail-row"><span className="detail-key">City</span><span className="detail-val">{recipient.city}</span></div>}
+            {recipient.district && <div className="detail-row"><span className="detail-key">District</span><span className="detail-val">{recipient.district}</span></div>}
+            {recipient.state && <div className="detail-row"><span className="detail-key">State</span><span className="detail-val">{recipient.state}</span></div>}
             {recipient.pincode && (
               <div className="detail-row">
                 <span className="detail-key">PIN Code</span>
@@ -151,132 +131,7 @@ function ResultSection({ result }) {
         </div>
       )}
 
-      {/* ---- Postal Info Grid ---- */}
-      {isValid && (
-        <div className="card">
-          <div className="card-header">
-            <div className="card-icon">
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                <path d="M8 1L8 9M8 9L5 6M8 9L11 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                <path d="M2 11v2a2 2 0 002 2h8a2 2 0 002-2v-2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-              </svg>
-            </div>
-            <h3 className="card-label">Postal Information</h3>
-          </div>
-          <div className="info-grid">
-            {[
-              ['District', result.district],
-              ['State', result.state],
-              ['Circle', result.circle],
-              ['Region', result.region],
-              ['Division', result.division],
-              result.latitude && result.latitude !== 'NA'
-                ? ['Coordinates', `${result.latitude}, ${result.longitude}`]
-                : null,
-            ].filter(Boolean).map(([label, value], i) => (
-              <div key={i} className="info-cell">
-                <span className="cell-label">{label}</span>
-                <span className="cell-value">{value}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* ---- Map View ---- */}
-      {isValid && hasCoords && (
-        <div className="card card-map">
-          <div className="card-header">
-            <div className="card-icon">
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                <path d="M8 1C5.2 1 3 3.2 3 6c0 4 5 9 5 9s5-5 5-9c0-2.8-2.2-5-5-5z" stroke="currentColor" strokeWidth="1.5" fill="none"/>
-                <circle cx="8" cy="6" r="2" stroke="currentColor" strokeWidth="1.5" fill="none"/>
-              </svg>
-            </div>
-            <h3 className="card-label">Location</h3>
-            {nearbyPins.length > 0 && (
-              <span className="pill">{nearbyPins.length} nearby</span>
-            )}
-            <a
-              href={`https://www.google.com/maps/search/post+office/@${result.latitude},${result.longitude},14z`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="map-link"
-            >
-              Open in Google Maps
-              <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
-                <path d="M6 3h7v7M13 3L6 10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-            </a>
-          </div>
-          <div className="map-container">
-            <MapContainer
-              center={[parseFloat(result.latitude), parseFloat(result.longitude)]}
-              zoom={13}
-              scrollWheelZoom={false}
-              style={{ height: '100%', width: '100%', borderRadius: '8px' }}
-            >
-              <TileLayer
-                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-              />
-              {/* Main PIN marker */}
-              <Marker
-                position={[parseFloat(result.latitude), parseFloat(result.longitude)]}
-                icon={mainIcon}
-              >
-                <Popup>
-                  <strong>{result.pincode}</strong> (searched)<br/>
-                  {result.district}, {result.state}
-                </Popup>
-              </Marker>
-              {/* Nearby PIN markers */}
-              {nearbyPins.map((np, i) => (
-                <Marker
-                  key={i}
-                  position={[np.latitude, np.longitude]}
-                  icon={nearbyIcon}
-                >
-                  <Popup>
-                    <strong>{np.pincode}</strong><br/>
-                    {np.officename}<br/>
-                    {np.district}
-                  </Popup>
-                </Marker>
-              ))}
-            </MapContainer>
-          </div>
-        </div>
-      )}
-
-      {/* ---- Post Offices ---- */}
-      {isValid && result.post_offices?.length > 0 && (
-        <div className="card">
-          <div className="card-header">
-            <div className="card-icon">
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                <rect x="2" y="3" width="12" height="10" rx="2" stroke="currentColor" strokeWidth="1.5" fill="none"/>
-                <path d="M2 6h12" stroke="currentColor" strokeWidth="1.5"/>
-              </svg>
-            </div>
-            <h3 className="card-label">Post Offices</h3>
-            <span className="pill">{result.post_offices.length}</span>
-          </div>
-          <div className="office-list">
-            {result.post_offices.map((o, i) => (
-              <div key={i} className="office-item">
-                <span className="office-name">{o.officename}</span>
-                <span className={`badge ${o.delivery === 'Delivery' ? 'badge-green' : 'badge-gray'}`}>
-                  {o.delivery}
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* ---- Suggestion (invalid) ---- */}
-      {!isValid && result.suggestion && (
+      {!isValid && suggestion && (
         <div className="card card-suggestion">
           <div className="card-header">
             <div className="card-icon suggestion-icon">
@@ -291,8 +146,8 @@ function ResultSection({ result }) {
             <div className="suggestion-pin-wrap">
               <span className="suggestion-label">Correct PIN</span>
               <span className="suggestion-pin">
-                {result.suggestion.suggested_pin}
-                <button className="copy-btn-inline" onClick={() => copyToClipboard(result.suggestion.suggested_pin, 'Suggested PIN')} title="Copy PIN">
+                {suggestion.suggested_pin}
+                <button className="copy-btn-inline" onClick={() => copyToClipboard(suggestion.suggested_pin, 'Suggested PIN')} title="Copy PIN">
                   <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
                     <rect x="5" y="5" width="9" height="9" rx="1.5" stroke="currentColor" strokeWidth="1.5" fill="none"/>
                     <path d="M11 5V3.5A1.5 1.5 0 009.5 2h-6A1.5 1.5 0 002 3.5v6A1.5 1.5 0 003.5 11H5" stroke="currentColor" strokeWidth="1.5" fill="none"/>
@@ -301,32 +156,46 @@ function ResultSection({ result }) {
               </span>
             </div>
             <div className="suggestion-details">
-              {result.suggestion.district && (
-                <div className="detail-row compact">
-                  <span className="detail-key">District</span>
-                  <span className="detail-val">{result.suggestion.district}</span>
-                </div>
-              )}
-              {result.suggestion.state && (
-                <div className="detail-row compact">
-                  <span className="detail-key">State</span>
-                  <span className="detail-val">{result.suggestion.state}</span>
-                </div>
-              )}
-              {result.suggestion.circle && (
-                <div className="detail-row compact">
-                  <span className="detail-key">Circle</span>
-                  <span className="detail-val">{result.suggestion.circle}</span>
-                </div>
-              )}
+              {suggestion.district && <div className="detail-row compact"><span className="detail-key">District</span><span className="detail-val">{suggestion.district}</span></div>}
+              {suggestion.state && <div className="detail-row compact"><span className="detail-key">State</span><span className="detail-val">{suggestion.state}</span></div>}
+              {suggestion.circle && <div className="detail-row compact"><span className="detail-key">Circle</span><span className="detail-val">{suggestion.circle}</span></div>}
             </div>
           </div>
         </div>
       )}
 
-      {/* ---- Actual location (invalid) ---- */}
-      {!isValid && result.actual_location && (
+      {postalData && (
         <div className="card">
+          <div className="card-header">
+            <div className="card-icon">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                <rect x="2" y="2" width="12" height="12" rx="2" stroke="currentColor" strokeWidth="1.5" fill="none"/>
+                <path d="M2 6h12" stroke="currentColor" strokeWidth="1.5"/>
+                <path d="M6 2v12" stroke="currentColor" strokeWidth="1.5"/>
+              </svg>
+            </div>
+            <h3 className="card-label">{isValid ? 'Postal Information' : 'Suggested Postal Information'}</h3>
+          </div>
+          <div className="info-grid">
+            {[
+              ['District', postalData.district],
+              ['State', postalData.state],
+              ['Circle', postalData.circle],
+              ['Region', postalData.region],
+              ['Division', postalData.division],
+              hasCoords ? ['Coordinates', `${postalData.latitude}, ${postalData.longitude}`] : null,
+            ].filter(Boolean).map(([label, value], i) => (
+              <div key={i} className="info-cell">
+                <span className="cell-label">{label}</span>
+                <span className="cell-value">{value}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {postalData && hasCoords && (
+        <div className="card card-map">
           <div className="card-header">
             <div className="card-icon">
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
@@ -334,17 +203,60 @@ function ResultSection({ result }) {
                 <circle cx="8" cy="6" r="2" stroke="currentColor" strokeWidth="1.5" fill="none"/>
               </svg>
             </div>
-            <h3 className="card-label">PIN {result.pincode} Actually Belongs To</h3>
+            <h3 className="card-label">{isValid ? 'Location' : 'Suggested Location'}</h3>
+            {nearbyPins.length > 0 && <span className="pill">{nearbyPins.length} nearby</span>}
+            <a href={`https://www.google.com/maps/search/post+office/@${postalData.latitude},${postalData.longitude},14z`}
+              target="_blank" rel="noopener noreferrer" className="map-link">
+              Open in Google Maps
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
+                <path d="M6 3h7v7M13 3L6 10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </a>
           </div>
-          <div className="info-grid">
-            <div className="info-cell">
-              <span className="cell-label">District</span>
-              <span className="cell-value">{result.actual_location.district}</span>
+          <div className="map-container">
+            <MapContainer
+              center={[parseFloat(postalData.latitude), parseFloat(postalData.longitude)]}
+              zoom={13} scrollWheelZoom={false}
+              style={{ height: '100%', width: '100%' }}
+            >
+              <TileLayer
+                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+              />
+              <Marker position={[parseFloat(postalData.latitude), parseFloat(postalData.longitude)]} icon={mainIcon}>
+                <Popup><strong>{postalPin}</strong><br/>{postalData.district}, {postalData.state}</Popup>
+              </Marker>
+              {nearbyPins.map((np, i) => (
+                <Marker key={i} position={[np.latitude, np.longitude]} icon={nearbyIcon}>
+                  <Popup><strong>{np.pincode}</strong><br/>{np.officename}<br/>{np.district}</Popup>
+                </Marker>
+              ))}
+            </MapContainer>
+          </div>
+        </div>
+      )}
+
+      {postalOffices?.length > 0 && (
+        <div className="card">
+          <div className="card-header">
+            <div className="card-icon">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                <rect x="2" y="3" width="12" height="10" rx="2" stroke="currentColor" strokeWidth="1.5" fill="none"/>
+                <path d="M2 6h12" stroke="currentColor" strokeWidth="1.5"/>
+              </svg>
             </div>
-            <div className="info-cell">
-              <span className="cell-label">State</span>
-              <span className="cell-value">{result.actual_location.state}</span>
-            </div>
+            <h3 className="card-label">{isValid ? 'Post Offices' : 'Suggested PIN Post Offices'}</h3>
+            <span className="pill">{postalOffices.length}</span>
+          </div>
+          <div className="office-list">
+            {postalOffices.map((o, i) => (
+              <div key={i} className="office-item">
+                <span className="office-name">{o.officename}</span>
+                <span className={`badge ${o.delivery === 'Delivery' ? 'badge-green' : 'badge-gray'}`}>
+                  {o.delivery}
+                </span>
+              </div>
+            ))}
           </div>
         </div>
       )}
