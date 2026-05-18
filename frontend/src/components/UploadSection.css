@@ -230,6 +230,11 @@
   margin-top: 20px;
 }
 
+.actions + .results,
+.slow-ocr-hint + .results {
+  margin-top: 24px;
+}
+
 .btn-ghost {
   padding: 10px 22px;
   background: #fff;
