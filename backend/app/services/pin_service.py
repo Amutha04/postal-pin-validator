@@ -27,7 +27,8 @@ SKIP_WORDS = {
     'registered', 'courier', 'parcel', 'letter',
     'south', 'north', 'east', 'west', 'central',
     'your', 'their', 'from', 'with', 'that', 'this',
-    'through', 'sincerely', 'regards', 'thanking'
+    'through', 'sincerely', 'regards', 'thanking',
+    'address', 'code', 'pincode'
 }
 
 # ─────────────────────────────────────────
@@ -39,6 +40,27 @@ MULTI_WORD_STATES = [
     'arunachal pradesh', 'jammu kashmir', 'jammu and kashmir',
     'andaman nicobar', 'andaman and nicobar'
 ]
+
+STATE_ALIASES = {
+    r'\bu\s*\.?\s*p\s*\.?\b': 'uttar pradesh',
+}
+
+OFFICE_TYPE_PRIORITY = {
+    'HO': 60,
+    'H.O': 60,
+    'PO': 25,
+    'SO': 25,
+    'S.O': 25,
+    'BO': 0,
+    'B.O': 0,
+}
+
+def expand_state_aliases(text):
+    """Normalize common state abbreviations before keyword extraction/search."""
+    normalized = text
+    for pattern, replacement in STATE_ALIASES.items():
+        normalized = re.sub(pattern, f' {replacement} ', normalized, flags=re.IGNORECASE)
+    return normalized
 
 def extract_pincode(text):
     """Extract 6-digit PIN code from OCR text — prioritizes 'To' address over 'From'"""
@@ -217,6 +239,7 @@ def is_phone_number(text, pin):
 
 def extract_address_keywords(text):
     """Extract meaningful keywords from address text"""
+    text = expand_state_aliases(text)
     clean_text = re.sub(r'[^a-zA-Z\s]', ' ', text)
     words = clean_text.lower().split()
     
@@ -225,6 +248,18 @@ def extract_address_keywords(text):
         w.strip() for w in words
         if len(w.strip()) > 3 and w.strip() not in SKIP_WORDS
     ]
+
+    locality_suffixes = {'nagar', 'colony', 'puram', 'patti', 'pet', 'pettai'}
+    for index in range(len(words) - 1):
+        current = words[index].strip()
+        next_word = words[index + 1].strip()
+        if (
+            len(current) > 2 and
+            current not in SKIP_WORDS and
+            next_word in locality_suffixes
+        ):
+            keywords.append(current + next_word)
+
     return list(dict.fromkeys(keywords))  # Remove duplicates
 
 def fuzzy_match(word1, word2, threshold=0.75):
@@ -242,8 +277,9 @@ def find_state_from_keywords(keywords, full_text):
     Step 1 of hierarchical search:
     Find matching state from keywords
     """
-    full_lower = full_text.lower()
-    full_normalized = normalize_location_text(full_text)
+    expanded_text = expand_state_aliases(full_text)
+    full_lower = expanded_text.lower()
+    full_normalized = normalize_location_text(expanded_text)
 
     # Check multi-word states first
     for state in MULTI_WORD_STATES:
@@ -329,6 +365,7 @@ def score_suggestion_record(record, address_keywords):
     region = normalize_location_text(record.get("regionname", ""))
     state = normalize_location_text(record.get("statename", ""))
     circle = normalize_location_text(record.get("circlename", ""))
+    office_type = str(record.get("officetype", "")).upper()
     score = 0
 
     for phrase in phrases:
@@ -344,6 +381,9 @@ def score_suggestion_record(record, address_keywords):
 
         if district and phrase == district:
             score += 50
+            if office and district in office:
+                score += 80
+            score += OFFICE_TYPE_PRIORITY.get(office_type, 0)
         elif district and phrase in district:
             score += 30
 
@@ -476,10 +516,19 @@ def keyword_in_field(keyword, field):
 
 def keyword_exists_in_location(keyword):
     """Return True when a keyword is a known district/state/circle anywhere."""
-    return bool(
-        get_by_district(keyword) or
-        get_by_state(keyword) or
-        get_by_circle(keyword)
+    kw = normalize_location_text(keyword)
+    if not kw:
+        return False
+
+    candidates = []
+    candidates.extend((record.get("district", "") for record in get_by_district(keyword)))
+    candidates.extend((record.get("statename", "") for record in get_by_state(keyword)))
+    candidates.extend((record.get("circlename", "") for record in get_by_circle(keyword)))
+
+    return any(
+        kw == normalize_location_text(candidate) or
+        fuzzy_match(kw, normalize_location_text(candidate), threshold=0.9)
+        for candidate in candidates
     )
 
 def records_match_address(records, address_keywords):
@@ -544,7 +593,7 @@ def validate_pin(pincode, address_keywords, full_text=""):
 
     # ── Step 3: ML Validation ──
     ml_result = {"ml_valid": None, "message": "ML skipped"}
-    first = records[0]
+    first = best_suggestion_record(records, address_keywords) or records[0]
     district = first.get("district", "")
     state = first.get("statename", "")
     circle = first.get("circlename", "")
@@ -553,16 +602,17 @@ def validate_pin(pincode, address_keywords, full_text=""):
         ml_result = validate_pin_with_ml(
             pincode, district, state, circle
         )
-        # Trust MongoDB match over ML if prefix is close
         if matched and ml_result.get("ml_valid") == False:
-            predicted = ml_result.get("predicted_prefix", "")
-            actual = str(pincode)[:3]
-            if predicted and abs(int(actual) - int(predicted)) <= 1:
-                ml_result["ml_valid"] = True
-                ml_result["message"] = "ML confirms PIN is valid ✅"
-
+            ml_result = {
+                "ml_valid": True,
+                "message": "ML overridden: postal database and address match confirm this PIN",
+                "overridden": True
+            }
     # ── Step 4: Get post offices ──
-    post_offices = get_post_offices_by_pincode(pincode)
+    post_offices = order_post_offices_by_keywords(
+        get_post_offices_by_pincode(pincode),
+        address_keywords
+    )
 
     # ── Step 5: Build response ──
     if matched:
@@ -590,6 +640,9 @@ def validate_pin(pincode, address_keywords, full_text=""):
                 "district": first.get("district"),
                 "state": first.get("statename"),
             },
-            "ml_validation": ml_result,
+            "ml_validation": {
+                "ml_valid": None,
+                "message": "ML skipped: postal database shows this PIN belongs to a different address"
+            },
             "suggestion": suggestion
         }
